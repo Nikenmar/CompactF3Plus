@@ -1,25 +1,24 @@
+**Compact F3 Plus** is a client-side NeoForge mod for Minecraft 1.21.1 that replaces the dense, cluttered vanilla F3 debug screen with a clean and minimal HUD overlay. It displays only the essential information you need, anchored to the top left of your screen on a sleek transparent background.
 
-Installation information
-=======
+*(This is an actively maintained fork of the original "Compact F3" by username65735).*
 
-This template repository can be directly cloned to get you started with a new
-mod. Simply create a new repository cloned from this one, by following the
-instructions provided by [GitHub](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template).
+## ✨ Features
 
-Once you have your clone, simply open the repository in the IDE of your choice. The usual recommendation for an IDE is either IntelliJ IDEA or Eclipse.
+- **Essential Metrics:** Neatly tracks FPS, Server TPS/MSPT, exact XYZ coordinates, movement speed (km/h), facing direction, in-game time, light levels, and biomes.
+- **Dynamic Crosshair Compatibility:** Our unique render event implementation temporarily pauses vanilla UI occlusion, guaranteeing that this mod stays 100% compatible with custom crosshair mods such as **Dynamic Crosshair**.
+- **Highly Customizable:** Ships with a native in-game configuration menu (available in the Mod List). Toggle specific lines on or off, enable colored health/TPS indicators, or hide the center 3D XYZ gizmo.
+- **F3 Replacement:** Automatically syncs with vanilla inputs. Press F3 to toggle the compact overlay seamlessly out of the box, or bind it to a custom hotkey like `F8`.
 
-If at any point you are missing libraries in your IDE, or you've run into problems you can
-run `gradlew --refresh-dependencies` to refresh the local cache. `gradlew clean` to reset everything 
-{this does not affect your code} and then start the process again.
+## 📦 Installation
+Requirements:
+* **Minecraft 1.21.1**
+* **NeoForge Loader**
 
-Mapping Names:
-============
-By default, the MDK is configured to use the official mapping names from Mojang for methods and fields 
-in the Minecraft codebase. These names are covered by a specific license. All modders should be aware of this
-license. For the latest license text, refer to the mapping file itself, or the reference copy here:
-https://github.com/NeoForged/NeoForm/blob/main/Mojang.md
+Simply drop the `.jar` file into your `.minecraft/mods` folder!
 
-Additional Resources: 
-==========
-Community Documentation: https://docs.neoforged.net/  
-NeoForged Discord: https://discord.neoforged.net/
+## 🛠️ Building from Source
+Clone the repository and run the standard Gradle wrapper via Command Line/Git Bash:
+```bash
+./gradlew build
+```
+The compiled mod will be located in `/build/libs/`.

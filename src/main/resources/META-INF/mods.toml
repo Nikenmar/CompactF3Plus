@@ -1,9 +1,0 @@
-modLoader = "neoforge"
-loaderVersion = "[1.21,)"
-license = "MIT"
-[[mods]]
-modId = "compactf3"
-version = "1.0.0"
-displayName = "Compact F3 HUD"
-authors = "username65735"
-description = "Displays compact player info synced with monitor refresh rate."
