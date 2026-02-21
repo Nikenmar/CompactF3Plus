@@ -2,13 +2,6 @@
 
 *(This is an actively maintained fork of the original "Compact F3" by username65735).*
 
-## 📦 Installation
-Requirements:
-* **Minecraft 1.21.1**
-* **NeoForge Loader**
-
-Simply drop the `.jar` file into your `.minecraft/mods` folder!
-
 ## 🛠️ Building from Source
 Clone the repository and run the standard Gradle wrapper via Command Line/Git Bash:
 ```bash
