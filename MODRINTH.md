@@ -1,6 +1,6 @@
 # Compact F3 Plus
 
-A sleek, minimal, and highly customizable HUD overlay for Forge 1.19.2. It replaces the dense, cluttered vanilla F3 debug screen with a clean interface showing only essential information.
+A sleek, minimal, and highly customizable HUD overlay for Forge 1.16.5. It replaces the dense, cluttered vanilla F3 debug screen with a clean interface showing only essential information.
 
 This branch is a maintained backport of the original NeoForge 1.21.1 project.
 

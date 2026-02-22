@@ -1,38 +1,26 @@
 package net.nikenmar.compactf3plus;
 
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.AbstractSliderButton;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.matrix.MatrixStack;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.widget.button.Button;
+import net.minecraft.util.text.StringTextComponent;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class CompactF3PlusConfigScreen extends Screen {
-    private final Screen parent;
-    private final List<ConfigEntry> entries = new ArrayList<>();
-    private int scrollOffset = 0;
-    private boolean draggingScrollbar = false;
     private static final int SCROLLBAR_WIDTH = 6;
     private static final int SPACING = 24;
     private static final int CONTENT_TOP = 40;
 
-    private int getContentHeight() {
-        return entries.size() * SPACING;
-    }
-
-    private int getViewHeight() {
-        return Math.max(1, height - 90);
-    }
-
-    private int getMaxScroll() {
-        return Math.max(0, getContentHeight() - getViewHeight());
-    }
+    private final Screen parent;
+    private final List<ConfigEntry> entries = new ArrayList<ConfigEntry>();
+    private int scrollOffset = 0;
+    private boolean draggingScrollbar = false;
 
     public CompactF3PlusConfigScreen(Screen parent) {
-        super(Component.literal("Compact F3 Plus Settings"));
+        super(new StringTextComponent("Compact F3 Plus Settings"));
         this.parent = parent;
     }
 
@@ -59,6 +47,7 @@ public class CompactF3PlusConfigScreen extends Screen {
         entries.add(new ToggleEntry("Show Light", CompactF3PlusConfig.showLight));
         entries.add(new ToggleEntry("Show Biome", CompactF3PlusConfig.showBiome));
         entries.add(new ToggleEntry("Show Dimension", CompactF3PlusConfig.showDimension));
+
         entries.add(new HeaderEntry("Other"));
         entries.add(new ToggleEntry("Replace Default F3", CompactF3PlusConfig.replaceF3));
         entries.add(new ToggleEntry("Show Gizmo (if Replace F3)", CompactF3PlusConfig.showGizmo));
@@ -66,91 +55,105 @@ public class CompactF3PlusConfigScreen extends Screen {
         entries.add(new ToggleEntry("Color Indicators (FPS/TPS)", CompactF3PlusConfig.colorIndicators));
         entries.add(new ToggleEntry("Text Shadow", CompactF3PlusConfig.textShadow));
         entries.add(new ToggleEntry("Detailed Speed", CompactF3PlusConfig.detailedSpeed));
-        entries.add(new CycleOpacityEntry("Background Opacity", CompactF3PlusConfig.backgroundOpacity));
+        entries.add(new IntCycleEntry("Background Opacity", CompactF3PlusConfig.backgroundOpacity, 5, 0, 100, "%"));
 
         scrollOffset = Math.max(0, Math.min(getMaxScroll(), scrollOffset));
         layoutButtons();
     }
 
+    private int getContentHeight() {
+        return entries.size() * SPACING;
+    }
+
+    private int getViewHeight() {
+        return Math.max(1, this.height - 90);
+    }
+
+    private int getMaxScroll() {
+        return Math.max(0, getContentHeight() - getViewHeight());
+    }
+
     private void layoutButtons() {
-        clearWidgets();
+        this.buttons.clear();
+        this.children.clear();
 
         int btnWidth = 200;
         int btnHeight = 20;
-        int centerX = width / 2 - btnWidth / 2;
+        int centerX = this.width / 2 - btnWidth / 2;
 
         for (int i = 0; i < entries.size(); i++) {
             int y = CONTENT_TOP + i * SPACING - scrollOffset;
-            if (y < CONTENT_TOP - btnHeight || y > height - 50)
+            if (y < CONTENT_TOP - btnHeight || y > this.height - 50) {
                 continue;
+            }
 
             ConfigEntry entry = entries.get(i);
-            if (entry instanceof ToggleEntry toggle) {
-                addRenderableWidget(new Button(
+            if (entry instanceof ToggleEntry) {
+                ToggleEntry toggle = (ToggleEntry) entry;
+                Button button = new Button(
                         centerX, y, btnWidth, btnHeight,
-                        Component.literal(toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")),
+                        new StringTextComponent(toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")),
                         btn -> {
                             toggle.value.set(!toggle.value.get());
                             CompactF3PlusConfig.SPEC.save();
-                            btn.setMessage(Component.literal(
-                                    toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")));
-                        }));
-            } else if (entry instanceof CycleOpacityEntry opacity) {
-                addRenderableWidget(new AbstractSliderButton(centerX, y, btnWidth, btnHeight,
-                        Component.literal(opacity.label + ": " + opacity.value.get() + "%"),
-                        opacity.value.get() / 100.0D) {
-
-                    @Override
-                    protected void updateMessage() {
-                        this.setMessage(Component.literal(opacity.label + ": " + opacity.value.get() + "%"));
-                    }
-
-                    @Override
-                    protected void applyValue() {
-                        int newValue = (int) Math.round(this.value * 100.0D);
-                        opacity.value.set(newValue);
-                        CompactF3PlusConfig.SPEC.save();
-                    }
-                });
+                            btn.setMessage(new StringTextComponent(toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")));
+                        });
+                this.addButton(button);
+            } else if (entry instanceof IntCycleEntry) {
+                IntCycleEntry cycle = (IntCycleEntry) entry;
+                Button button = new Button(
+                        centerX, y, btnWidth, btnHeight,
+                        new StringTextComponent(cycle.label + ": " + cycle.value.get() + cycle.suffix),
+                        btn -> {
+                            int current = cycle.value.get();
+                            int next = current + cycle.step;
+                            if (next > cycle.max) {
+                                next = cycle.min;
+                            }
+                            cycle.value.set(next);
+                            CompactF3PlusConfig.SPEC.save();
+                            btn.setMessage(new StringTextComponent(cycle.label + ": " + cycle.value.get() + cycle.suffix));
+                        });
+                this.addButton(button);
             }
         }
 
-        addRenderableWidget(new Button(width / 2 - 155, height - 28, 150, 20, Component.literal("Reset to Default"), btn -> {
+        this.addButton(new Button(this.width / 2 - 155, this.height - 28, 150, 20, new StringTextComponent("Reset to Default"), btn -> {
             CompactF3PlusConfig.resetToDefaults();
-            layoutButtons(); // Refresh the screen buttons to reflect the default values
+            layoutButtons();
         }));
 
-        addRenderableWidget(new Button(width / 2 + 5, height - 28, 150, 20, Component.literal("Done"), btn -> onClose()));
+        this.addButton(new Button(this.width / 2 + 5, this.height - 28, 150, 20, new StringTextComponent("Done"), btn -> closeScreen()));
     }
 
     @Override
-    public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
-        renderBackground(poseStack);
-        super.render(poseStack, mouseX, mouseY, partialTick);
-        drawCenteredString(poseStack, font, title, width / 2, 15, 0xFFFFFF);
+    public void render(MatrixStack matrixStack, int mouseX, int mouseY, float partialTick) {
+        this.renderBackground(matrixStack);
+        super.render(matrixStack, mouseX, mouseY, partialTick);
+        drawCenteredString(matrixStack, this.font, this.title, this.width / 2, 15, 0xFFFFFF);
 
         for (int i = 0; i < entries.size(); i++) {
-            if (entries.get(i) instanceof HeaderEntry header) {
+            if (entries.get(i) instanceof HeaderEntry) {
+                HeaderEntry header = (HeaderEntry) entries.get(i);
                 int y = CONTENT_TOP + i * SPACING - scrollOffset + 6;
-                if (y >= CONTENT_TOP && y <= height - 50) {
-                    drawCenteredString(poseStack, font, header.title, width / 2, y, 0xAAAAAA);
+                if (y >= CONTENT_TOP && y <= this.height - 50) {
+                    drawCenteredString(matrixStack, this.font, header.title, this.width / 2, y, 0xAAAAAA);
                 }
             }
         }
 
-        // Scrollbar
         int maxScroll = getMaxScroll();
         if (maxScroll > 0) {
-            int trackX = width / 2 + 110;
+            int trackX = this.width / 2 + 110;
             int trackTop = CONTENT_TOP;
-            int trackBottom = height - 50;
+            int trackBottom = this.height - 50;
             int trackHeight = trackBottom - trackTop;
 
-            fill(poseStack, trackX, trackTop, trackX + SCROLLBAR_WIDTH, trackBottom, 0x40FFFFFF);
+            fill(matrixStack, trackX, trackTop, trackX + SCROLLBAR_WIDTH, trackBottom, 0x40FFFFFF);
 
             int thumbHeight = Math.max(15, trackHeight * getViewHeight() / getContentHeight());
             int thumbY = trackTop + (int) ((float) scrollOffset / maxScroll * (trackHeight - thumbHeight));
-            fill(poseStack, trackX, thumbY, trackX + SCROLLBAR_WIDTH, thumbY + thumbHeight, 0xAAFFFFFF);
+            fill(matrixStack, trackX, thumbY, trackX + SCROLLBAR_WIDTH, thumbY + thumbHeight, 0xAAFFFFFF);
         }
     }
 
@@ -167,9 +170,9 @@ public class CompactF3PlusConfigScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0 && getMaxScroll() > 0) {
-            int trackX = width / 2 + 110;
+            int trackX = this.width / 2 + 110;
             if (mouseX >= trackX && mouseX <= trackX + SCROLLBAR_WIDTH
-                    && mouseY >= CONTENT_TOP && mouseY <= height - 50) {
+                    && mouseY >= CONTENT_TOP && mouseY <= this.height - 50) {
                 draggingScrollbar = true;
                 scrollToMouse(mouseY);
                 return true;
@@ -180,8 +183,9 @@ public class CompactF3PlusConfigScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 0)
+        if (button == 0) {
             draggingScrollbar = false;
+        }
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
@@ -196,10 +200,11 @@ public class CompactF3PlusConfigScreen extends Screen {
 
     private void scrollToMouse(double mouseY) {
         int trackTop = CONTENT_TOP;
-        int trackHeight = height - 50 - trackTop;
+        int trackHeight = this.height - 50 - trackTop;
         if (trackHeight <= 0) {
             return;
         }
+
         float ratio = (float) (mouseY - trackTop) / trackHeight;
         int nextScroll = Math.max(0, Math.min(getMaxScroll(), (int) (ratio * getMaxScroll())));
         if (nextScroll != scrollOffset) {
@@ -209,19 +214,46 @@ public class CompactF3PlusConfigScreen extends Screen {
     }
 
     @Override
-    public void onClose() {
-        minecraft.setScreen(parent);
+    public void closeScreen() {
+        this.minecraft.displayGuiScreen(parent);
     }
 
     private interface ConfigEntry {
     }
 
-    private record HeaderEntry(String title) implements ConfigEntry {
+    private static final class HeaderEntry implements ConfigEntry {
+        private final StringTextComponent title;
+
+        private HeaderEntry(String title) {
+            this.title = new StringTextComponent(title);
+        }
     }
 
-    private record ToggleEntry(String label, ForgeConfigSpec.BooleanValue value) implements ConfigEntry {
+    private static final class ToggleEntry implements ConfigEntry {
+        private final String label;
+        private final ForgeConfigSpec.BooleanValue value;
+
+        private ToggleEntry(String label, ForgeConfigSpec.BooleanValue value) {
+            this.label = label;
+            this.value = value;
+        }
     }
 
-    private record CycleOpacityEntry(String label, ForgeConfigSpec.IntValue value) implements ConfigEntry {
+    private static final class IntCycleEntry implements ConfigEntry {
+        private final String label;
+        private final ForgeConfigSpec.IntValue value;
+        private final int step;
+        private final int min;
+        private final int max;
+        private final String suffix;
+
+        private IntCycleEntry(String label, ForgeConfigSpec.IntValue value, int step, int min, int max, String suffix) {
+            this.label = label;
+            this.value = value;
+            this.step = step;
+            this.min = min;
+            this.max = max;
+            this.suffix = suffix;
+        }
     }
 }
