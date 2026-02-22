@@ -2,6 +2,7 @@ package net.nikenmar.compactf3plus;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.common.ModConfigSpec;
@@ -41,18 +42,30 @@ public class CompactF3PlusConfigScreen extends Screen {
 
         entries.add(new HeaderEntry("HUD Sections"));
         entries.add(new ToggleEntry("Show FPS", CompactF3PlusConfig.showFps));
-        entries.add(new ToggleEntry("Show RAM/TPS", CompactF3PlusConfig.showSystem));
+        entries.add(new ToggleEntry("Show RAM", CompactF3PlusConfig.showSystem));
+        entries.add(new ToggleEntry("Show Lag", CompactF3PlusConfig.showLag));
+        entries.add(new ToggleEntry("Show TPS", CompactF3PlusConfig.showTps));
         entries.add(new ToggleEntry("Show Coordinates", CompactF3PlusConfig.showCoords));
-        entries.add(new ToggleEntry("Show Session/Ping", CompactF3PlusConfig.showSession));
+        entries.add(new ToggleEntry("Show Subchunk/Slime", CompactF3PlusConfig.showSubchunk));
+        entries.add(new ToggleEntry("Show Local Difficulty", CompactF3PlusConfig.showLocalDifficulty));
+        entries.add(new ToggleEntry("Show Entities Count", CompactF3PlusConfig.showEntities));
+        entries.add(new ToggleEntry("Show Session", CompactF3PlusConfig.showSession));
+        entries.add(new ToggleEntry("Show Ping", CompactF3PlusConfig.showPing));
         entries.add(new ToggleEntry("Show Speed", CompactF3PlusConfig.showSpeed));
         entries.add(new ToggleEntry("Show Facing", CompactF3PlusConfig.showFacing));
-        entries.add(new ToggleEntry("Show Time/Day", CompactF3PlusConfig.showTime));
+        entries.add(new ToggleEntry("Show Pitch (Angle)", CompactF3PlusConfig.showPitch));
+        entries.add(new ToggleEntry("Show Time", CompactF3PlusConfig.showTime));
+        entries.add(new ToggleEntry("Show Day", CompactF3PlusConfig.showDay));
         entries.add(new ToggleEntry("Show Light", CompactF3PlusConfig.showLight));
         entries.add(new ToggleEntry("Show Biome", CompactF3PlusConfig.showBiome));
+        entries.add(new ToggleEntry("Show Dimension", CompactF3PlusConfig.showDimension));
         entries.add(new HeaderEntry("Other"));
         entries.add(new ToggleEntry("Replace Default F3", CompactF3PlusConfig.replaceF3));
         entries.add(new ToggleEntry("Show Gizmo (if Replace F3)", CompactF3PlusConfig.showGizmo));
         entries.add(new ToggleEntry("Color Indicators (FPS/TPS)", CompactF3PlusConfig.colorIndicators));
+        entries.add(new ToggleEntry("Text Shadow", CompactF3PlusConfig.textShadow));
+        entries.add(new ToggleEntry("Detailed Speed", CompactF3PlusConfig.detailedSpeed));
+        entries.add(new CycleOpacityEntry("Background Opacity", CompactF3PlusConfig.backgroundOpacity));
 
         layoutButtons();
     }
@@ -81,11 +94,35 @@ public class CompactF3PlusConfigScreen extends Screen {
                         })
                         .bounds(centerX, y, btnWidth, btnHeight)
                         .build());
+            } else if (entry instanceof CycleOpacityEntry opacity) {
+                addRenderableWidget(new AbstractSliderButton(centerX, y, btnWidth, btnHeight,
+                        Component.literal(opacity.label + ": " + opacity.value.get() + "%"),
+                        opacity.value.get() / 100.0D) {
+
+                    @Override
+                    protected void updateMessage() {
+                        this.setMessage(Component.literal(opacity.label + ": " + opacity.value.get() + "%"));
+                    }
+
+                    @Override
+                    protected void applyValue() {
+                        int newValue = (int) Math.round(this.value * 100.0D);
+                        opacity.value.set(newValue);
+                        CompactF3PlusConfig.SPEC.save();
+                    }
+                });
             }
         }
 
+        addRenderableWidget(Button.builder(Component.literal("Reset to Default"), btn -> {
+            CompactF3PlusConfig.resetToDefaults();
+            layoutButtons(); // Refresh the screen buttons to reflect the default values
+        })
+                .bounds(width / 2 - 155, height - 28, 150, 20)
+                .build());
+
         addRenderableWidget(Button.builder(Component.literal("Done"), btn -> onClose())
-                .bounds(width / 2 - 100, height - 28, 200, 20)
+                .bounds(width / 2 + 5, height - 28, 150, 20)
                 .build());
     }
 
@@ -176,5 +213,8 @@ public class CompactF3PlusConfigScreen extends Screen {
     }
 
     private record ToggleEntry(String label, ModConfigSpec.BooleanValue value) implements ConfigEntry {
+    }
+
+    private record CycleOpacityEntry(String label, ModConfigSpec.IntValue value) implements ConfigEntry {
     }
 }
