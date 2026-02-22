@@ -10,6 +10,9 @@ base {
     archivesName = mod_id
 }
 
+def releaseJarName = "${mod_id}-${mod_version}-fabric-${minecraft_version}.jar"
+def releaseSourcesJarName = "${mod_id}-${mod_version}-fabric-${minecraft_version}-sources.jar"
+
 repositories {
     mavenCentral()
     maven { url = 'https://maven.fabricmc.net/' }
@@ -52,6 +55,14 @@ java {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 21
+}
+
+tasks.named("remapJar").configure {
+    archiveFileName = releaseJarName
+}
+
+tasks.named("remapSourcesJar").configure {
+    archiveFileName = releaseSourcesJarName
 }
 
 publishing {
