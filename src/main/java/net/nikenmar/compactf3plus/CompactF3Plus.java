@@ -6,14 +6,14 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.DrawableHelper;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.client.util.InputUtil;
-import net.minecraft.registry.RegistryKey;
+import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.server.integrated.IntegratedServer;
+import net.minecraft.util.registry.RegistryKey;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.LightType;
@@ -122,14 +122,14 @@ public final class CompactF3Plus implements ClientModInitializer {
 
             // Cancel vanilla debug immediately when F3 state is on.
             // This avoids one-frame flashes before our own state sync runs in HudRenderCallback.
-            return mc.getDebugHud().shouldShowDebugHud();
+            return mc.options.debugEnabled;
         }
 
         private static boolean shouldHideDebugCrosshair() {
             return shouldCancelVanillaDebugOverlay() && !CompactF3PlusConfig.showGizmo;
         }
 
-        private static void onRenderHud(DrawContext guiGraphics, RenderTickCounter ignored) {
+        private static void onRenderHud(MatrixStack matrices, float ignored) {
             MinecraftClient mc = MinecraftClient.getInstance();
             if (TOGGLE_HUD.wasPressed()) {
                 compactHudEnabled = !compactHudEnabled;
@@ -140,7 +140,7 @@ public final class CompactF3Plus implements ClientModInitializer {
                 return;
             }
 
-            boolean debugShowing = mc.getDebugHud().shouldShowDebugHud();
+            boolean debugShowing = mc.options.debugEnabled;
             if (CompactF3PlusConfig.replaceF3) {
                 if (debugShowing != wasDebugShowing) {
                     compactHudEnabled = !compactHudEnabled;
@@ -148,7 +148,7 @@ public final class CompactF3Plus implements ClientModInitializer {
                 }
 
                 if (!compactHudEnabled && debugShowing) {
-                    mc.getDebugHud().toggleDebugHud();
+                    mc.options.debugEnabled = false;
                     wasDebugShowing = false;
                 }
 
@@ -166,7 +166,7 @@ public final class CompactF3Plus implements ClientModInitializer {
             boolean useColors = CompactF3PlusConfig.colorIndicators;
             currentLineIndex = 0;
 
-            int fps = mc.getCurrentFps();
+            int fps = parseCurrentFps(mc);
             long now2 = System.currentTimeMillis();
             if (now2 - lastFpsSampleTime >= 1000) {
                 fpsHistory.add(fps);
@@ -279,7 +279,10 @@ public final class CompactF3Plus implements ClientModInitializer {
                 if (showTps) {
                     IntegratedServer server = mc.getServer();
                     if (server != null) {
-                        double mspt = server.getAverageNanosPerTick() / 1_000_000.0;
+                        double mspt = server.getTickTime();
+                        if (mspt <= 0.0) {
+                            mspt = 50.0;
+                        }
                         double tps = Math.min(20.0, 1000.0 / mspt);
                         int tpsColor = 0x55FF55;
                         if (tps < 19.0) {
@@ -498,7 +501,8 @@ public final class CompactF3Plus implements ClientModInitializer {
             int alphaInt = (int) ((opacitySetting / 100.0f) * 255.0f);
             int bgColor = (alphaInt << 24) | 0x000000;
 
-            guiGraphics.fill(
+            DrawableHelper.fill(
+                    matrices,
                     drawX - padding,
                     drawY - padding,
                     drawX + maxWidth + padding,
@@ -511,10 +515,29 @@ public final class CompactF3Plus implements ClientModInitializer {
                 int x = drawX;
                 for (int j = 0; j < line.currentSegmentIndex; j++) {
                     TextSegment seg = line.segments.get(j);
-                    guiGraphics.drawText(font, seg.text, x, drawY, seg.color, drawShadow);
+                    if (drawShadow) {
+                        font.drawWithShadow(matrices, seg.text, x, drawY, seg.color);
+                    } else {
+                        font.draw(matrices, seg.text, x, drawY, seg.color);
+                    }
                     x += font.getWidth(seg.text);
                 }
                 drawY += lineHeight;
+            }
+        }
+
+        private static int parseCurrentFps(MinecraftClient mc) {
+            String debug = mc.fpsDebugString;
+            if (debug == null || debug.isEmpty()) {
+                return 0;
+            }
+
+            int firstSpace = debug.indexOf(' ');
+            String value = firstSpace > 0 ? debug.substring(0, firstSpace) : debug;
+            try {
+                return Integer.parseInt(value);
+            } catch (NumberFormatException ignored) {
+                return 0;
             }
         }
     }
