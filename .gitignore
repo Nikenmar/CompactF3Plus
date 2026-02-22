@@ -6,12 +6,13 @@ bin
 .classpath
 .project
 
-# idea
+# idea/vscode
 out
 *.ipr
 *.iws
 *.iml
 .idea
+.vscode/
 
 # gradle
 build
@@ -24,3 +25,6 @@ runs
 run-data
 
 repo
+
+# AI Assistant
+CLAUDE.md
