@@ -28,6 +28,7 @@ public final class CompactF3PlusConfig {
         public static final ModConfigSpec.BooleanValue textShadow;
         public static final ModConfigSpec.BooleanValue replaceF3;
         public static final ModConfigSpec.BooleanValue showGizmo;
+        public static final ModConfigSpec.BooleanValue enabledByDefault;
         public static final ModConfigSpec.IntValue backgroundOpacity;
 
         static {
@@ -79,6 +80,10 @@ public final class CompactF3PlusConfig {
                                 .comment("Show the XYZ axis gizmo when F3 is replaced (only works when replaceF3 is true)")
                                 .define("showGizmo", false);
 
+                enabledByDefault = builder
+                                .comment("Enable the Compact HUD by default when joining a world")
+                                .define("enabledByDefault", false);
+
                 backgroundOpacity = builder
                                 .comment("Background opacity percentage (0-100)")
                                 .defineInRange("backgroundOpacity", 25, 0, 100);
@@ -113,6 +118,7 @@ public final class CompactF3PlusConfig {
                 detailedSpeed.set(false);
                 replaceF3.set(true);
                 showGizmo.set(false);
+                enabledByDefault.set(false);
                 backgroundOpacity.set(25);
                 SPEC.save();
         }

@@ -62,6 +62,7 @@ public class CompactF3PlusConfigScreen extends Screen {
         entries.add(new HeaderEntry("Other"));
         entries.add(new ToggleEntry("Replace Default F3", CompactF3PlusConfig.replaceF3));
         entries.add(new ToggleEntry("Show Gizmo (if Replace F3)", CompactF3PlusConfig.showGizmo));
+        entries.add(new ToggleEntry("Enabled by Default", CompactF3PlusConfig.enabledByDefault));
         entries.add(new ToggleEntry("Color Indicators (FPS/TPS)", CompactF3PlusConfig.colorIndicators));
         entries.add(new ToggleEntry("Text Shadow", CompactF3PlusConfig.textShadow));
         entries.add(new ToggleEntry("Detailed Speed", CompactF3PlusConfig.detailedSpeed));

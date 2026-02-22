@@ -38,6 +38,7 @@ public class CompactF3Plus {
         NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGui);
         NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiLayerPre);
         NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiLayerPost);
+        NeoForge.EVENT_BUS.addListener(HudRenderer::onPlayerLogin);
     }
 
     private static final class HudRenderer {
@@ -60,17 +61,67 @@ public class CompactF3Plus {
                 GLFW.GLFW_KEY_F8,
                 "key.categories.compactf3plus");
 
-        private record TextSegment(String text, int color) {
+        // Reusable Object Pools
+        private static final List<HudLine> lines = new ArrayList<>();
+        private static int currentLineIndex = 0;
+
+        private static class TextSegment {
+            String text;
+            int color;
+
+            TextSegment(String text, int color) {
+                this.text = text;
+                this.color = color;
+            }
+
+            void set(String text, int color) {
+                this.text = text;
+                this.color = color;
+            }
         }
 
-        private record HudLine(List<TextSegment> segments) {
-            HudLine(String text) {
-                this(List.of(new TextSegment(text, 0xFFFFFF)));
+        private static class HudLine {
+            final List<TextSegment> segments = new ArrayList<>();
+            int currentSegmentIndex = 0;
+
+            void reset() {
+                currentSegmentIndex = 0;
+            }
+
+            void addSegment(String text, int color) {
+                if (currentSegmentIndex < segments.size()) {
+                    segments.get(currentSegmentIndex).set(text, color);
+                } else {
+                    segments.add(new TextSegment(text, color));
+                }
+                currentSegmentIndex++;
+            }
+
+            void addSegment(String text) {
+                addSegment(text, 0xFFFFFF);
+            }
+        }
+
+        private static HudLine nextLine() {
+            if (currentLineIndex < lines.size()) {
+                HudLine line = lines.get(currentLineIndex);
+                line.reset();
+                currentLineIndex++;
+                return line;
+            } else {
+                HudLine line = new HudLine();
+                lines.add(line);
+                currentLineIndex++;
+                return line;
             }
         }
 
         public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
             event.register(TOGGLE_HUD);
+        }
+
+        public static void onPlayerLogin(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
+            compactHudEnabled = CompactF3PlusConfig.enabledByDefault.get();
         }
 
         private static boolean toggledForCrosshair = false;
@@ -132,7 +183,7 @@ public class CompactF3Plus {
 
             Font font = mc.font;
             boolean useColors = CompactF3PlusConfig.colorIndicators.get();
-            List<HudLine> lines = new ArrayList<>();
+            currentLineIndex = 0;
 
             int fps = mc.getFps();
             long now2 = System.currentTimeMillis();
@@ -189,14 +240,14 @@ public class CompactF3Plus {
                         else
                             fpsColor = 0xFF5555;
                     }
-                    lines.add(new HudLine(List.of(
-                            new TextSegment("FPS: ", 0xFFFFFF),
-                            new TextSegment(String.valueOf(fps), fpsColor),
-                            new TextSegment(" (" + avgFps + " avg) " + (Math.round(msPerFrame * 10) / 10.0) + " ms",
-                                    0xFFFFFF))));
+
+                    HudLine line = nextLine();
+                    line.addSegment("FPS: ", 0xFFFFFF);
+                    line.addSegment(String.valueOf(fps), fpsColor);
+                    line.addSegment(" (" + avgFps + " avg) " + (Math.round(msPerFrame * 10) / 10.0) + " ms", 0xFFFFFF);
                 } else {
-                    lines.add(new HudLine(
-                            "FPS: " + fps + " (" + avgFps + " avg) " + (Math.round(msPerFrame * 10) / 10.0) + " ms"));
+                    nextLine().addSegment(
+                            "FPS: " + fps + " (" + avgFps + " avg) " + (Math.round(msPerFrame * 10) / 10.0) + " ms");
                 }
             }
 
@@ -274,18 +325,21 @@ public class CompactF3Plus {
 
                 if (!sysSegs.isEmpty()) {
                     if (useColors) {
-                        lines.add(new HudLine(sysSegs));
+                        HudLine line = nextLine();
+                        for (TextSegment seg : sysSegs) {
+                            line.addSegment(seg.text, seg.color);
+                        }
                     } else {
-                        lines.add(new HudLine(sysStr));
+                        nextLine().addSegment(sysStr);
                     }
                 }
             }
 
             // Coordinates
             if (CompactF3PlusConfig.showCoords.get()) {
-                lines.add(new HudLine("XYZ: " + (Math.round(player.getX() * 10) / 10.0) + ", "
+                nextLine().addSegment("XYZ: " + (Math.round(player.getX() * 10) / 10.0) + ", "
                         + (Math.round(player.getY() * 10) / 10.0) + ", "
-                        + (Math.round(player.getZ() * 10) / 10.0)));
+                        + (Math.round(player.getZ() * 10) / 10.0));
             }
 
             // Subchunk / Slime
@@ -310,7 +364,7 @@ public class CompactF3Plus {
                         // Ignore
                     }
                 }
-                lines.add(new HudLine(subchunkLine));
+                nextLine().addSegment(subchunkLine);
             }
 
             // Local Difficulty
@@ -319,8 +373,8 @@ public class CompactF3Plus {
                         .getCurrentDifficultyAt(player.blockPosition());
                 float effective = diff.getEffectiveDifficulty();
                 float special = diff.getSpecialMultiplier();
-                lines.add(new HudLine("Local Diff: " + (Math.round(effective * 100) / 100.0) + " | "
-                        + (Math.round(special * 100) / 100.0)));
+                nextLine().addSegment("Local Diff: " + (Math.round(effective * 100) / 100.0) + " | "
+                        + (Math.round(special * 100) / 100.0));
             }
 
             // Entities
@@ -332,7 +386,7 @@ public class CompactF3Plus {
                     eCount = debugEntities.substring(0, commaIdx);
                 }
                 eCount = eCount.replace("E: ", "");
-                lines.add(new HudLine("Entities: " + eCount));
+                nextLine().addSegment("Entities: " + eCount);
             }
 
             // Session + Ping
@@ -362,7 +416,7 @@ public class CompactF3Plus {
                 }
 
                 if (!sessionLine.isEmpty()) {
-                    lines.add(new HudLine(sessionLine));
+                    nextLine().addSegment(sessionLine);
                 }
             }
 
@@ -382,17 +436,17 @@ public class CompactF3Plus {
                     double speedKmhHorizontal = speedHorizontal * 3.6;
                     double speedKmhVertical = speedVertical * 3.6;
 
-                    lines.add(new HudLine("Speed:"));
-                    lines.add(new HudLine(" - Horizontal: " + (Math.round(speedKmhHorizontal * 100) / 100.0) + " km/h ("
-                            + (Math.round(speedHorizontal * 100) / 100.0) + " m/s)"));
-                    lines.add(new HudLine(" - Vertical: " + (Math.round(speedKmhVertical * 100) / 100.0) + " km/h ("
-                            + (Math.round(speedVertical * 100) / 100.0) + " m/s)"));
-                    lines.add(new HudLine(" - Total Speed: " + (Math.round(speedKmh * 100) / 100.0) + " km/h ("
-                            + (Math.round(speed * 100) / 100.0) + " m/s)"));
+                    nextLine().addSegment("Speed:");
+                    nextLine().addSegment(" - Horizontal: " + (Math.round(speedKmhHorizontal * 100) / 100.0) + " km/h ("
+                            + (Math.round(speedHorizontal * 100) / 100.0) + " m/s)");
+                    nextLine().addSegment(" - Vertical: " + (Math.round(speedKmhVertical * 100) / 100.0) + " km/h ("
+                            + (Math.round(speedVertical * 100) / 100.0) + " m/s)");
+                    nextLine().addSegment(" - Total Speed: " + (Math.round(speedKmh * 100) / 100.0) + " km/h ("
+                            + (Math.round(speed * 100) / 100.0) + " m/s)");
                 } else {
-                    lines.add(new HudLine("Speed: " + (Math.round(speed * 10) / 10.0) + " m/s (H: "
+                    nextLine().addSegment("Speed: " + (Math.round(speed * 10) / 10.0) + " m/s (H: "
                             + (Math.round(speedHorizontal * 10) / 10.0) + " | V: "
-                            + (Math.round(speedVertical * 10) / 10.0) + ")"));
+                            + (Math.round(speedVertical * 10) / 10.0) + ")");
                 }
             }
 
@@ -404,13 +458,13 @@ public class CompactF3Plus {
                 String[] dirs = { "South", "Southwest", "West", "Northwest", "North", "Northeast", "East",
                         "Southeast" };
                 String direction = dirs[Math.round(yaw / 45f) % 8];
-                lines.add(new HudLine("Facing: " + direction + " (" + (Math.round(yaw * 10) / 10.0) + "\u00B0)"));
+                nextLine().addSegment("Facing: " + direction + " (" + (Math.round(yaw * 10) / 10.0) + "\u00B0)");
             }
 
             // Pitch
             if (CompactF3PlusConfig.showPitch.get()) {
                 float pitch = player.getXRot();
-                lines.add(new HudLine("Pitch: " + (Math.round(pitch * 10) / 10.0) + "\u00B0"));
+                nextLine().addSegment("Pitch: " + (Math.round(pitch * 10) / 10.0) + "\u00B0");
             }
 
             // Time + Day
@@ -432,7 +486,7 @@ public class CompactF3Plus {
                     timeLine += "Day: " + day;
                 }
                 if (!timeLine.isEmpty()) {
-                    lines.add(new HudLine(timeLine));
+                    nextLine().addSegment(timeLine);
                 }
             }
 
@@ -441,23 +495,23 @@ public class CompactF3Plus {
                 BlockPos blockPos = player.blockPosition();
                 int blockLight = player.level().getBrightness(LightLayer.BLOCK, blockPos);
                 int skyLight = player.level().getBrightness(LightLayer.SKY, blockPos);
-                lines.add(new HudLine("Light: " + blockLight + " block | " + skyLight + " sky"));
+                nextLine().addSegment("Light: " + blockLight + " block | " + skyLight + " sky");
             }
 
             // Biome
             if (CompactF3PlusConfig.showBiome.get()) {
                 ResourceKey<Biome> biomeKey = player.level().getBiome(player.blockPosition()).unwrapKey().orElse(null);
                 String biome = biomeKey != null ? biomeKey.location().toString() : "unknown";
-                lines.add(new HudLine("Biome: " + biome));
+                nextLine().addSegment("Biome: " + biome);
             }
 
             // Dimension
             if (CompactF3PlusConfig.showDimension.get()) {
                 String dimension = player.level().dimension().location().toString();
-                lines.add(new HudLine("Dimension: " + dimension));
+                nextLine().addSegment("Dimension: " + dimension);
             }
 
-            if (lines.isEmpty())
+            if (currentLineIndex == 0)
                 return;
 
             // Draw
@@ -466,10 +520,11 @@ public class CompactF3Plus {
             int lineHeight = 10;
 
             int maxWidth = 0;
-            for (HudLine line : lines) {
+            for (int i = 0; i < currentLineIndex; i++) {
+                HudLine line = lines.get(i);
                 int lineWidth = 0;
-                for (TextSegment seg : line.segments) {
-                    lineWidth += font.width(seg.text);
+                for (int j = 0; j < line.currentSegmentIndex; j++) {
+                    lineWidth += font.width(line.segments.get(j).text);
                 }
                 maxWidth = Math.max(maxWidth, lineWidth);
             }
@@ -483,13 +538,15 @@ public class CompactF3Plus {
                     drawX - padding,
                     drawY - padding,
                     drawX + maxWidth + padding,
-                    drawY + lines.size() * lineHeight + padding,
+                    drawY + currentLineIndex * lineHeight + padding,
                     bgColor);
 
             boolean drawShadow = CompactF3PlusConfig.textShadow.get();
-            for (HudLine line : lines) {
+            for (int i = 0; i < currentLineIndex; i++) {
+                HudLine line = lines.get(i);
                 int x = drawX;
-                for (TextSegment seg : line.segments) {
+                for (int j = 0; j < line.currentSegmentIndex; j++) {
+                    TextSegment seg = line.segments.get(j);
                     event.getGuiGraphics().drawString(font, seg.text, x, drawY, seg.color, drawShadow);
                     x += font.width(seg.text);
                 }
