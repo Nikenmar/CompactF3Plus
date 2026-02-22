@@ -24,9 +24,9 @@
   "depends": {
     "fabricloader": "${loader_version_range}",
     "minecraft": "${minecraft_version_range}",
-    "java": ">=17",
-    "fabric-api": "*",
+    "java": ">=8",
+    "fabric": "*",
     "modmenu": "*",
-    "cloth-config": "*"
+    "cloth-config2": "*"
   }
 }

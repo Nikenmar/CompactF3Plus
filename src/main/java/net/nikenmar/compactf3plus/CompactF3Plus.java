@@ -13,6 +13,7 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.server.integrated.IntegratedServer;
+import net.minecraft.util.registry.Registry;
 import net.minecraft.util.registry.RegistryKey;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
@@ -344,7 +345,7 @@ public final class CompactF3Plus implements ClientModInitializer {
             }
 
             if (CompactF3PlusConfig.showLocalDifficulty) {
-                net.minecraft.world.LocalDifficulty diff = player.getWorld().getLocalDifficulty(player.getBlockPos());
+                net.minecraft.world.LocalDifficulty diff = player.world.getLocalDifficulty(player.getBlockPos());
                 float effective = diff.getLocalDifficulty();
                 float special = diff.getClampedLocalDifficulty();
                 nextLine().addSegment("Local Diff: " + (Math.round(effective * 100) / 100.0) + " | "
@@ -423,7 +424,7 @@ public final class CompactF3Plus implements ClientModInitializer {
             }
 
             if (CompactF3PlusConfig.showFacing) {
-                float yaw = player.getYaw() % 360;
+                float yaw = player.getYaw(1.0F) % 360;
                 if (yaw < 0) {
                     yaw += 360;
                 }
@@ -433,14 +434,14 @@ public final class CompactF3Plus implements ClientModInitializer {
             }
 
             if (CompactF3PlusConfig.showPitch) {
-                float pitch = player.getPitch();
+                float pitch = player.getPitch(1.0F);
                 nextLine().addSegment("Pitch: " + (Math.round(pitch * 10) / 10.0) + "\u00B0");
             }
 
             boolean bTime = CompactF3PlusConfig.showTime;
             boolean bDay = CompactF3PlusConfig.showDay;
             if (bTime || bDay) {
-                long totalTicks = player.getWorld().getTimeOfDay();
+                long totalTicks = player.world.getTimeOfDay();
                 String timeLine = "";
                 if (bTime) {
                     long ticks = totalTicks % 24000;
@@ -462,19 +463,23 @@ public final class CompactF3Plus implements ClientModInitializer {
 
             if (CompactF3PlusConfig.showLight) {
                 BlockPos blockPos = player.getBlockPos();
-                int blockLight = player.getWorld().getLightLevel(LightType.BLOCK, blockPos);
-                int skyLight = player.getWorld().getLightLevel(LightType.SKY, blockPos);
+                int blockLight = player.world.getLightLevel(LightType.BLOCK, blockPos);
+                int skyLight = player.world.getLightLevel(LightType.SKY, blockPos);
                 nextLine().addSegment("Light: " + blockLight + " block | " + skyLight + " sky");
             }
 
             if (CompactF3PlusConfig.showBiome) {
-                RegistryKey<Biome> biomeKey = player.getWorld().getBiome(player.getBlockPos()).getKey().orElse(null);
+                Biome biomeObj = player.world.getBiome(player.getBlockPos());
+                RegistryKey<Biome> biomeKey = player.world.getRegistryManager()
+                        .get(Registry.BIOME_KEY)
+                        .getKey(biomeObj)
+                        .orElse(null);
                 String biome = biomeKey != null ? biomeKey.getValue().toString() : "unknown";
                 nextLine().addSegment("Biome: " + biome);
             }
 
             if (CompactF3PlusConfig.showDimension) {
-                String dimension = player.getWorld().getRegistryKey().getValue().toString();
+                String dimension = player.world.getRegistryKey().getValue().toString();
                 nextLine().addSegment("Dimension: " + dimension);
             }
 
