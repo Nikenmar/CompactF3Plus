@@ -12,16 +12,16 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.config.ModConfig;
-import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
-import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
+import net.minecraftforge.client.ConfigScreenHandler;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraftforge.client.event.RenderGuiEvent;
+import net.minecraftforge.client.event.RenderGuiOverlayEvent;
+import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -30,15 +30,18 @@ import java.util.List;
 
 @Mod("compactf3plus")
 public class CompactF3Plus {
-    public CompactF3Plus(IEventBus modBus, ModContainer modContainer) {
-        modContainer.registerConfig(ModConfig.Type.CLIENT, CompactF3PlusConfig.SPEC);
-        modContainer.registerExtensionPoint(IConfigScreenFactory.class,
-                (container, parent) -> new CompactF3PlusConfigScreen(parent));
+    public CompactF3Plus() {
+        var modBus = FMLJavaModLoadingContext.get().getModEventBus();
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, CompactF3PlusConfig.SPEC);
+        ModLoadingContext.get().registerExtensionPoint(
+                ConfigScreenHandler.ConfigScreenFactory.class,
+                () -> new ConfigScreenHandler.ConfigScreenFactory(
+                        (minecraft, screen) -> new CompactF3PlusConfigScreen(screen)));
         modBus.addListener(HudRenderer::onRegisterKeyMappings);
-        NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGui);
-        NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiLayerPre);
-        NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiLayerPost);
-        NeoForge.EVENT_BUS.addListener(HudRenderer::onPlayerLogin);
+        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderGui);
+        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiOverlayPre);
+        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiOverlayPost);
+        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onPlayerLogin);
     }
 
     private static final class HudRenderer {
@@ -54,7 +57,7 @@ public class CompactF3Plus {
         private static int framesCollected = 0;
         private static long lastFrameTimeNano = System.nanoTime();
 
-        private static final long sessionStartTime = System.currentTimeMillis();
+        private static long sessionStartTime = System.currentTimeMillis();
         private static final KeyMapping TOGGLE_HUD = new KeyMapping(
                 "key.compactf3plus.toggleHud",
                 InputConstants.Type.KEYSYM,
@@ -120,35 +123,42 @@ public class CompactF3Plus {
             event.register(TOGGLE_HUD);
         }
 
-        public static void onPlayerLogin(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
+        public static void onPlayerLogin(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
             compactHudEnabled = CompactF3PlusConfig.enabledByDefault.get();
+            wasDebugShowing = false;
+            sessionStartTime = System.currentTimeMillis();
         }
 
         private static boolean toggledForCrosshair = false;
 
-        public static void onRenderGuiLayerPre(RenderGuiLayerEvent.Pre event) {
+        public static void onRenderGuiOverlayPre(RenderGuiOverlayEvent.Pre event) {
+            Minecraft mc = Minecraft.getInstance();
+            LocalPlayer player = mc.player;
+            if (player == null || mc.options.hideGui)
+                return;
+
             if (!CompactF3PlusConfig.replaceF3.get())
                 return;
 
-            if (event.getName().equals(VanillaGuiLayers.DEBUG_OVERLAY)) {
+            if (event.getOverlay().equals(VanillaGuiOverlay.DEBUG_TEXT.type())) {
                 event.setCanceled(true);
             }
 
             if (!CompactF3PlusConfig.showGizmo.get()
-                    && event.getName().equals(VanillaGuiLayers.CROSSHAIR)
-                    && Minecraft.getInstance().getDebugOverlay().showDebugScreen()) {
+                    && event.getOverlay().equals(VanillaGuiOverlay.CROSSHAIR.type())
+                    && Minecraft.getInstance().options.renderDebug) {
 
                 // Temporarily disable the debug overlay state before the crosshair layer
                 // renders
-                Minecraft.getInstance().getDebugOverlay().toggleOverlay();
+                Minecraft.getInstance().options.renderDebug = false;
                 toggledForCrosshair = true;
             }
         }
 
-        public static void onRenderGuiLayerPost(RenderGuiLayerEvent.Post event) {
-            if (toggledForCrosshair && event.getName().equals(VanillaGuiLayers.CROSSHAIR)) {
+        public static void onRenderGuiOverlayPost(RenderGuiOverlayEvent.Post event) {
+            if (toggledForCrosshair && event.getOverlay().equals(VanillaGuiOverlay.CROSSHAIR.type())) {
                 // Restore the debug overlay state after the crosshair layer finishes rendering
-                Minecraft.getInstance().getDebugOverlay().toggleOverlay();
+                Minecraft.getInstance().options.renderDebug = true;
                 toggledForCrosshair = false;
             }
         }
@@ -161,7 +171,7 @@ public class CompactF3Plus {
             if (player == null || mc.options.hideGui)
                 return;
 
-            boolean debugShowing = mc.getDebugOverlay().showDebugScreen();
+            boolean debugShowing = mc.options.renderDebug;
             if (CompactF3PlusConfig.replaceF3.get()) {
                 if (debugShowing != wasDebugShowing) {
                     compactHudEnabled = !compactHudEnabled;
@@ -169,7 +179,7 @@ public class CompactF3Plus {
                 }
 
                 if (!compactHudEnabled && debugShowing) {
-                    mc.getDebugOverlay().toggleOverlay();
+                    mc.options.renderDebug = false;
                     wasDebugShowing = false;
                 }
 
@@ -210,7 +220,7 @@ public class CompactF3Plus {
 
             // FPS
             if (CompactF3PlusConfig.showFps.get()) {
-                float msPerFrame = 1000f / fps;
+                float msPerFrame = fps > 0 ? (1000f / fps) : 0f;
 
                 // We only need a minimum of say, 10 seconds of history to start calculating an
                 // average effectively.
@@ -304,8 +314,8 @@ public class CompactF3Plus {
                 if (showTps) {
                     IntegratedServer server = mc.getSingleplayerServer();
                     if (server != null) {
-                        double mspt = server.getAverageTickTimeNanos() / 1_000_000.0;
-                        double tps = Math.min(20.0, 1000.0 / mspt);
+                        double mspt = server.getAverageTickTime();
+                        double tps = mspt > 0.0 ? Math.min(20.0, 1000.0 / mspt) : 20.0;
                         int tpsColor = 0x55FF55;
                         if (tps < 19.0)
                             tpsColor = 0xFFFF55;

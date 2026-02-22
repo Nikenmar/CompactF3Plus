@@ -1,38 +1,38 @@
 package net.nikenmar.compactf3plus;
 
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.minecraftforge.common.ForgeConfigSpec;
 
 public final class CompactF3PlusConfig {
-        public static final ModConfigSpec SPEC;
+        public static final ForgeConfigSpec SPEC;
 
-        public static final ModConfigSpec.BooleanValue showFps;
-        public static final ModConfigSpec.BooleanValue showSystem;
-        public static final ModConfigSpec.BooleanValue showLag;
-        public static final ModConfigSpec.BooleanValue showTps;
-        public static final ModConfigSpec.BooleanValue showCoords;
-        public static final ModConfigSpec.BooleanValue showSubchunk;
-        public static final ModConfigSpec.BooleanValue showLocalDifficulty;
-        public static final ModConfigSpec.BooleanValue showEntities;
-        public static final ModConfigSpec.BooleanValue showSession;
-        public static final ModConfigSpec.BooleanValue showPing;
-        public static final ModConfigSpec.BooleanValue showSpeed;
-        public static final ModConfigSpec.BooleanValue detailedSpeed;
-        public static final ModConfigSpec.BooleanValue showFacing;
-        public static final ModConfigSpec.BooleanValue showPitch;
-        public static final ModConfigSpec.BooleanValue showTime;
-        public static final ModConfigSpec.BooleanValue showDay;
-        public static final ModConfigSpec.BooleanValue showLight;
-        public static final ModConfigSpec.BooleanValue showBiome;
-        public static final ModConfigSpec.BooleanValue showDimension;
-        public static final ModConfigSpec.BooleanValue colorIndicators;
-        public static final ModConfigSpec.BooleanValue textShadow;
-        public static final ModConfigSpec.BooleanValue replaceF3;
-        public static final ModConfigSpec.BooleanValue showGizmo;
-        public static final ModConfigSpec.BooleanValue enabledByDefault;
-        public static final ModConfigSpec.IntValue backgroundOpacity;
+        public static final ForgeConfigSpec.BooleanValue showFps;
+        public static final ForgeConfigSpec.BooleanValue showSystem;
+        public static final ForgeConfigSpec.BooleanValue showLag;
+        public static final ForgeConfigSpec.BooleanValue showTps;
+        public static final ForgeConfigSpec.BooleanValue showCoords;
+        public static final ForgeConfigSpec.BooleanValue showSubchunk;
+        public static final ForgeConfigSpec.BooleanValue showLocalDifficulty;
+        public static final ForgeConfigSpec.BooleanValue showEntities;
+        public static final ForgeConfigSpec.BooleanValue showSession;
+        public static final ForgeConfigSpec.BooleanValue showPing;
+        public static final ForgeConfigSpec.BooleanValue showSpeed;
+        public static final ForgeConfigSpec.BooleanValue detailedSpeed;
+        public static final ForgeConfigSpec.BooleanValue showFacing;
+        public static final ForgeConfigSpec.BooleanValue showPitch;
+        public static final ForgeConfigSpec.BooleanValue showTime;
+        public static final ForgeConfigSpec.BooleanValue showDay;
+        public static final ForgeConfigSpec.BooleanValue showLight;
+        public static final ForgeConfigSpec.BooleanValue showBiome;
+        public static final ForgeConfigSpec.BooleanValue showDimension;
+        public static final ForgeConfigSpec.BooleanValue colorIndicators;
+        public static final ForgeConfigSpec.BooleanValue textShadow;
+        public static final ForgeConfigSpec.BooleanValue replaceF3;
+        public static final ForgeConfigSpec.BooleanValue showGizmo;
+        public static final ForgeConfigSpec.BooleanValue enabledByDefault;
+        public static final ForgeConfigSpec.IntValue backgroundOpacity;
 
         static {
-                ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
+                ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 
                 builder.comment("HUD Section Toggles").push("sections");
 

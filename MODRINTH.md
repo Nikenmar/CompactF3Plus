@@ -1,6 +1,8 @@
 # Compact F3 Plus
 
-A sleek, minimal, and highly customizable HUD overlay for NeoForge. It replaces the dense, cluttered vanilla F3 debug screen with a clean interface showing only essential information. Built for modern Minecraft versions.
+A sleek, minimal, and highly customizable HUD overlay for Forge 1.20.1. It replaces the dense, cluttered vanilla F3 debug screen with a clean interface showing only essential information.
+
+This branch is a maintained backport of the original NeoForge 1.21.1 project.
 
 This mod works client-side only. No server installation is required or supported. Players can configure individual HUD elements through the native in-game Mod Menu.
 

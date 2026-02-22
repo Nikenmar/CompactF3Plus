@@ -1,12 +1,24 @@
 # Compact F3 Plus
 
-**Compact F3 Plus** is a client-side NeoForge mod for Minecraft 1.21.1 that replaces the vanilla F3 debug screen with a clean and minimal HUD overlay. It focuses on displaying essential debugging information in a compact format.
+**Compact F3 Plus** is a client-side Forge mod for Minecraft 1.20.1 that replaces the vanilla F3 debug screen with a clean and minimal HUD overlay.
 
-*(This is an actively maintained fork of the original "Compact F3" by username65735).*
+This repository is a maintained backport branch of the original NeoForge 1.21.1 work.
 
-## Building from Source
+## Compatibility
 
-Clone the repository and run the Gradle wrapper:
+- Minecraft: `1.20.1`
+- Forge loader line: `47.x`
+- Client-side only (server install is not required)
+
+## Features
+
+- compact replacement for the vanilla debug wall of text
+- configurable HUD sections (FPS, RAM, lag, coords, speed, biome, light, etc.)
+- optional standalone mode with `F8` toggle
+- in-game config screen
+
+## Build
 
 ```bash
 ./gradlew build
+```

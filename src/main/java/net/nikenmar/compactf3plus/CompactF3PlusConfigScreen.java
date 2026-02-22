@@ -5,7 +5,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.minecraftforge.common.ForgeConfigSpec;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +24,7 @@ public class CompactF3PlusConfigScreen extends Screen {
     }
 
     private int getViewHeight() {
-        return height - 90;
+        return Math.max(1, height - 90);
     }
 
     private int getMaxScroll() {
@@ -68,6 +68,7 @@ public class CompactF3PlusConfigScreen extends Screen {
         entries.add(new ToggleEntry("Detailed Speed", CompactF3PlusConfig.detailedSpeed));
         entries.add(new CycleOpacityEntry("Background Opacity", CompactF3PlusConfig.backgroundOpacity));
 
+        scrollOffset = Math.max(0, Math.min(getMaxScroll(), scrollOffset));
         layoutButtons();
     }
 
@@ -129,6 +130,7 @@ public class CompactF3PlusConfigScreen extends Screen {
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(guiGraphics);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         guiGraphics.drawCenteredString(font, title, width / 2, 15, 0xFFFFFF);
 
@@ -158,9 +160,12 @@ public class CompactF3PlusConfigScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        scrollOffset = Math.max(0, Math.min(getMaxScroll(), scrollOffset - (int) (scrollY * 10)));
-        rebuildWidgets();
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        int nextScroll = Math.max(0, Math.min(getMaxScroll(), scrollOffset - (int) (delta * 10)));
+        if (nextScroll != scrollOffset) {
+            scrollOffset = nextScroll;
+            layoutButtons();
+        }
         return true;
     }
 
@@ -197,9 +202,15 @@ public class CompactF3PlusConfigScreen extends Screen {
     private void scrollToMouse(double mouseY) {
         int trackTop = CONTENT_TOP;
         int trackHeight = height - 50 - trackTop;
+        if (trackHeight <= 0) {
+            return;
+        }
         float ratio = (float) (mouseY - trackTop) / trackHeight;
-        scrollOffset = Math.max(0, Math.min(getMaxScroll(), (int) (ratio * getMaxScroll())));
-        rebuildWidgets();
+        int nextScroll = Math.max(0, Math.min(getMaxScroll(), (int) (ratio * getMaxScroll())));
+        if (nextScroll != scrollOffset) {
+            scrollOffset = nextScroll;
+            layoutButtons();
+        }
     }
 
     @Override
@@ -213,9 +224,9 @@ public class CompactF3PlusConfigScreen extends Screen {
     private record HeaderEntry(String title) implements ConfigEntry {
     }
 
-    private record ToggleEntry(String label, ModConfigSpec.BooleanValue value) implements ConfigEntry {
+    private record ToggleEntry(String label, ForgeConfigSpec.BooleanValue value) implements ConfigEntry {
     }
 
-    private record CycleOpacityEntry(String label, ModConfigSpec.IntValue value) implements ConfigEntry {
+    private record CycleOpacityEntry(String label, ForgeConfigSpec.IntValue value) implements ConfigEntry {
     }
 }
