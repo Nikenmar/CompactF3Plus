@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.server.IntegratedServer;
@@ -195,7 +196,7 @@ public class CompactF3Plus {
             boolean useColors = CompactF3PlusConfig.colorIndicators.get();
             currentLineIndex = 0;
 
-            int fps = mc.getFps();
+            int fps = getCurrentFps(mc);
             long now2 = System.currentTimeMillis();
             if (now2 - lastFpsSampleTime >= 1000) {
                 fpsHistory.add(fps);
@@ -364,7 +365,7 @@ public class CompactF3Plus {
                 IntegratedServer server = mc.getSingleplayerServer();
                 if (server != null) {
                     try {
-                        long seed = server.getWorldData().worldGenOptions().seed();
+                        long seed = server.getWorldData().worldGenSettings().seed();
                         long l = seed + (long) (cx * cx * 4987142) + (long) (cx * 5947611) + (long) (cz * cz) * 4392871L
                                 + (long) (cz * 389711) ^ 987234911L;
                         java.util.Random rnd = new java.util.Random(l);
@@ -379,7 +380,7 @@ public class CompactF3Plus {
 
             // Local Difficulty
             if (CompactF3PlusConfig.showLocalDifficulty.get()) {
-                net.minecraft.world.DifficultyInstance diff = player.level()
+                net.minecraft.world.DifficultyInstance diff = player.level
                         .getCurrentDifficultyAt(player.blockPosition());
                 float effective = diff.getEffectiveDifficulty();
                 float special = diff.getSpecialMultiplier();
@@ -481,7 +482,7 @@ public class CompactF3Plus {
             boolean bTime = CompactF3PlusConfig.showTime.get();
             boolean bDay = CompactF3PlusConfig.showDay.get();
             if (bTime || bDay) {
-                long totalTicks = player.level().getDayTime();
+                long totalTicks = player.level.getDayTime();
                 String timeLine = "";
                 if (bTime) {
                     long ticks = totalTicks % 24000;
@@ -503,21 +504,21 @@ public class CompactF3Plus {
             // Light
             if (CompactF3PlusConfig.showLight.get()) {
                 BlockPos blockPos = player.blockPosition();
-                int blockLight = player.level().getBrightness(LightLayer.BLOCK, blockPos);
-                int skyLight = player.level().getBrightness(LightLayer.SKY, blockPos);
+                int blockLight = player.level.getBrightness(LightLayer.BLOCK, blockPos);
+                int skyLight = player.level.getBrightness(LightLayer.SKY, blockPos);
                 nextLine().addSegment("Light: " + blockLight + " block | " + skyLight + " sky");
             }
 
             // Biome
             if (CompactF3PlusConfig.showBiome.get()) {
-                ResourceKey<Biome> biomeKey = player.level().getBiome(player.blockPosition()).unwrapKey().orElse(null);
+                ResourceKey<Biome> biomeKey = player.level.getBiome(player.blockPosition()).unwrapKey().orElse(null);
                 String biome = biomeKey != null ? biomeKey.location().toString() : "unknown";
                 nextLine().addSegment("Biome: " + biome);
             }
 
             // Dimension
             if (CompactF3PlusConfig.showDimension.get()) {
-                String dimension = player.level().dimension().location().toString();
+                String dimension = player.level.dimension().location().toString();
                 nextLine().addSegment("Dimension: " + dimension);
             }
 
@@ -544,7 +545,8 @@ public class CompactF3Plus {
             int alphaInt = (int) ((opacitySetting / 100.0f) * 255.0f);
             int bgColor = (alphaInt << 24) | 0x000000;
 
-            event.getGuiGraphics().fill(
+            GuiComponent.fill(
+                    event.getPoseStack(),
                     drawX - padding,
                     drawY - padding,
                     drawX + maxWidth + padding,
@@ -557,10 +559,29 @@ public class CompactF3Plus {
                 int x = drawX;
                 for (int j = 0; j < line.currentSegmentIndex; j++) {
                     TextSegment seg = line.segments.get(j);
-                    event.getGuiGraphics().drawString(font, seg.text, x, drawY, seg.color, drawShadow);
+                    if (drawShadow) {
+                        font.drawShadow(event.getPoseStack(), seg.text, x, drawY, seg.color);
+                    } else {
+                        font.draw(event.getPoseStack(), seg.text, x, drawY, seg.color);
+                    }
                     x += font.width(seg.text);
                 }
                 drawY += lineHeight;
+            }
+        }
+
+        private static int getCurrentFps(Minecraft mc) {
+            String fpsString = mc.fpsString;
+            if (fpsString == null || fpsString.isEmpty()) {
+                return 0;
+            }
+
+            int separator = fpsString.indexOf(' ');
+            String fpsPart = separator >= 0 ? fpsString.substring(0, separator) : fpsString;
+            try {
+                return Integer.parseInt(fpsPart);
+            } catch (NumberFormatException ignored) {
+                return 0;
             }
         }
     }

@@ -1,10 +1,10 @@
 package net.nikenmar.compactf3plus;
 
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 import java.util.ArrayList;
@@ -86,16 +86,15 @@ public class CompactF3PlusConfigScreen extends Screen {
 
             ConfigEntry entry = entries.get(i);
             if (entry instanceof ToggleEntry toggle) {
-                addRenderableWidget(Button.builder(
+                addRenderableWidget(new Button(
+                        centerX, y, btnWidth, btnHeight,
                         Component.literal(toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")),
                         btn -> {
                             toggle.value.set(!toggle.value.get());
                             CompactF3PlusConfig.SPEC.save();
                             btn.setMessage(Component.literal(
                                     toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")));
-                        })
-                        .bounds(centerX, y, btnWidth, btnHeight)
-                        .build());
+                        }));
             } else if (entry instanceof CycleOpacityEntry opacity) {
                 addRenderableWidget(new AbstractSliderButton(centerX, y, btnWidth, btnHeight,
                         Component.literal(opacity.label + ": " + opacity.value.get() + "%"),
@@ -116,29 +115,25 @@ public class CompactF3PlusConfigScreen extends Screen {
             }
         }
 
-        addRenderableWidget(Button.builder(Component.literal("Reset to Default"), btn -> {
+        addRenderableWidget(new Button(width / 2 - 155, height - 28, 150, 20, Component.literal("Reset to Default"), btn -> {
             CompactF3PlusConfig.resetToDefaults();
             layoutButtons(); // Refresh the screen buttons to reflect the default values
-        })
-                .bounds(width / 2 - 155, height - 28, 150, 20)
-                .build());
+        }));
 
-        addRenderableWidget(Button.builder(Component.literal("Done"), btn -> onClose())
-                .bounds(width / 2 + 5, height - 28, 150, 20)
-                .build());
+        addRenderableWidget(new Button(width / 2 + 5, height - 28, 150, 20, Component.literal("Done"), btn -> onClose()));
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(guiGraphics);
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-        guiGraphics.drawCenteredString(font, title, width / 2, 15, 0xFFFFFF);
+    public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+        renderBackground(poseStack);
+        super.render(poseStack, mouseX, mouseY, partialTick);
+        drawCenteredString(poseStack, font, title, width / 2, 15, 0xFFFFFF);
 
         for (int i = 0; i < entries.size(); i++) {
             if (entries.get(i) instanceof HeaderEntry header) {
                 int y = CONTENT_TOP + i * SPACING - scrollOffset + 6;
                 if (y >= CONTENT_TOP && y <= height - 50) {
-                    guiGraphics.drawCenteredString(font, header.title, width / 2, y, 0xAAAAAA);
+                    drawCenteredString(poseStack, font, header.title, width / 2, y, 0xAAAAAA);
                 }
             }
         }
@@ -151,11 +146,11 @@ public class CompactF3PlusConfigScreen extends Screen {
             int trackBottom = height - 50;
             int trackHeight = trackBottom - trackTop;
 
-            guiGraphics.fill(trackX, trackTop, trackX + SCROLLBAR_WIDTH, trackBottom, 0x40FFFFFF);
+            fill(poseStack, trackX, trackTop, trackX + SCROLLBAR_WIDTH, trackBottom, 0x40FFFFFF);
 
             int thumbHeight = Math.max(15, trackHeight * getViewHeight() / getContentHeight());
             int thumbY = trackTop + (int) ((float) scrollOffset / maxScroll * (trackHeight - thumbHeight));
-            guiGraphics.fill(trackX, thumbY, trackX + SCROLLBAR_WIDTH, thumbY + thumbHeight, 0xAAFFFFFF);
+            fill(poseStack, trackX, thumbY, trackX + SCROLLBAR_WIDTH, thumbY + thumbHeight, 0xAAFFFFFF);
         }
     }
 
