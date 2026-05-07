@@ -1,9 +1,15 @@
 package net.nikenmar.compactf3plus;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.client.gui.components.debug.DebugScreenEntryStatus;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -16,39 +22,21 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.config.ModConfig;
-import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
-@Mod("compactf3plus")
-public class CompactF3Plus {
-    public CompactF3Plus(IEventBus modBus, ModContainer modContainer) {
-        modContainer.registerConfig(ModConfig.Type.CLIENT, CompactF3PlusConfig.SPEC);
-        modContainer.registerExtensionPoint(IConfigScreenFactory.class,
-                (container, parent) -> new CompactF3PlusConfigScreen(parent));
-        modBus.addListener(HudRenderer::onRegisterKeyMappings);
-        // RenderGuiEvent.Pre fires before vanilla draws the HUD — we detect the F3
-        // toggle and force the overlay back off here so vanilla never gets a chance
-        // to render its own debug screen this frame (no 1-frame flicker).
-        NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiPre);
-        NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGui);
-        // showGizmo is currently inert on this branch (vanilla 3D gizmo requires a
-        // CameraRenderState we don't yet plumb through) — flag retained for forward
-        // compatibility once we render our own gizmo.
-        NeoForge.EVENT_BUS.addListener(HudRenderer::onPlayerLogin);
+public final class CompactF3Plus implements ClientModInitializer {
+    @Override
+    public void onInitializeClient() {
+        CompactF3PlusConfig.load();
+        HudRenderer.initialize();
     }
 
-    private static final class HudRenderer {
+
+    static final class HudRenderer {
         private static boolean compactHudEnabled = false;
         // True when the active HUD session was opened by pressing F3 (replaceF3 mode).
         // F8 and enabledByDefault do not set this — they open the HUD in "plain" mode
@@ -59,7 +47,7 @@ public class CompactF3Plus {
         // unconditionally (ALWAYS_ON when our gizmo is wanted, NEVER otherwise).
         // setStatus persists to disk, so we only call it on transitions. Initial
         // value `true` forces a setStatus(NEVER) on the first frame after world entry,
-        // which clears any stale ALWAYS_ON left over from a previous session crash.
+        // which clears any stale ALWAYS_ON left over from a previous session.
         // Trade-off: while replaceF3=on, the user cannot independently keep the
         // vanilla 3D crosshair always-on — that's by design (replaceF3=off if they want).
         private static boolean lastGizmoApplied = true;
@@ -74,11 +62,12 @@ public class CompactF3Plus {
         private static long lastFrameTimeNano = System.nanoTime();
 
         private static final long sessionStartTime = System.currentTimeMillis();
-        // Constructed directly via the record constructor; registered with NeoForge
-        // through RegisterKeyMappingsEvent#registerCategory in onRegisterKeyMappings
-        // (KeyMapping.Category.register(Identifier) is deprecated in 26.1).
+        // Fabric has no event for category registration — we use the deprecated
+        // KeyMapping.Category.register(Identifier) since it's still the only way to
+        // add the category to the SORT_ORDER list that vanilla iterates.
+        @SuppressWarnings("deprecation")
         private static final KeyMapping.Category COMPACT_F3_CATEGORY =
-                new KeyMapping.Category(Identifier.fromNamespaceAndPath("compactf3plus", "main"));
+                KeyMapping.Category.register(Identifier.fromNamespaceAndPath("compactf3plus", "main"));
         private static final KeyMapping TOGGLE_HUD = new KeyMapping(
                 "key.compactf3plus.toggleHud",
                 InputConstants.Type.KEYSYM,
@@ -132,30 +121,39 @@ public class CompactF3Plus {
                 line.reset();
                 currentLineIndex++;
                 return line;
-            } else {
-                HudLine line = new HudLine();
-                lines.add(line);
-                currentLineIndex++;
-                return line;
             }
+            HudLine line = new HudLine();
+            lines.add(line);
+            currentLineIndex++;
+            return line;
         }
 
-        public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
-            event.registerCategory(COMPACT_F3_CATEGORY);
-            event.register(TOGGLE_HUD);
+        static void initialize() {
+            KeyMappingHelper.registerKeyMapping(TOGGLE_HUD);
+
+            ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+                compactHudEnabled = CompactF3PlusConfig.enabledByDefault;
+                compactHudOpenedViaF3 = false;
+                wasDebugShowing = false;
+            });
+
+            // 26.1+ replaced HudRenderCallback with HudElement / HudElementRegistry.
+            // addFirst inserts BEFORE any vanilla element — ideal for our state machine
+            // that needs to run before vanilla picks up the F3 toggle this frame.
+            // addLast inserts AFTER everything else — where we draw our overlay.
+            HudElementRegistry.addFirst(
+                    Identifier.fromNamespaceAndPath("compactf3plus", "state_machine"),
+                    (graphics, delta) -> onPreHudExtract());
+            HudElementRegistry.addLast(
+                    Identifier.fromNamespaceAndPath("compactf3plus", "overlay"),
+                    HudRenderer::onRenderHud);
         }
 
-        public static void onPlayerLogin(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
-            compactHudEnabled = CompactF3PlusConfig.enabledByDefault.get();
-            compactHudOpenedViaF3 = false;
-        }
-
-        public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
-            // Run the F3 toggle detection BEFORE any HUD rendering this frame.
-            // Setting overlay visibility false here means vanilla's debug overlay
-            // never renders on the same frame the F3 key was processed.
+        // State machine runs before any vanilla HUD element draws this frame.
+        // Mirror of the NeoForge branch's RenderGuiEvent.Pre listener.
+        static void onPreHudExtract() {
             Minecraft mc = Minecraft.getInstance();
-            if (CompactF3PlusConfig.replaceF3.get()) {
+            if (CompactF3PlusConfig.replaceF3) {
                 boolean debugShowing = mc.debugEntries.isOverlayVisible();
                 if (debugShowing != wasDebugShowing) {
                     compactHudEnabled = !compactHudEnabled;
@@ -175,9 +173,9 @@ public class CompactF3Plus {
         // independently from the main F3 overlay — so we can keep F3 hidden while the
         // gizmo shows. setStatus persists to disk, so we only call it on transitions.
         private static void updateGizmoState(Minecraft mc) {
-            if (!CompactF3PlusConfig.replaceF3.get())
+            if (!CompactF3PlusConfig.replaceF3)
                 return;
-            boolean wantGizmo = CompactF3PlusConfig.showGizmo.get()
+            boolean wantGizmo = CompactF3PlusConfig.showGizmo
                     && compactHudEnabled
                     && compactHudOpenedViaF3;
             if (wantGizmo != lastGizmoApplied) {
@@ -187,9 +185,9 @@ public class CompactF3Plus {
             }
         }
 
-        public static void onRenderGui(RenderGuiEvent.Post event) {
+        private static void onRenderHud(GuiGraphicsExtractor guiGraphics, DeltaTracker delta) {
             Minecraft mc = Minecraft.getInstance();
-            if (TOGGLE_HUD.consumeClick()) {
+            while (TOGGLE_HUD.consumeClick()) {
                 compactHudEnabled = !compactHudEnabled;
                 compactHudOpenedViaF3 = false;
             }
@@ -197,11 +195,11 @@ public class CompactF3Plus {
             if (player == null || mc.options.hideGui)
                 return;
 
-            // replaceF3=on path: state machine is driven by onRenderGuiPre. Just bail
+            // replaceF3=on path: state machine is driven by onPreHudExtract. Just bail
             // if compact HUD isn't active for this frame.
             // replaceF3=off path: don't render our HUD while vanilla F3 is open.
             boolean debugShowing = mc.debugEntries.isOverlayVisible();
-            if (CompactF3PlusConfig.replaceF3.get()) {
+            if (CompactF3PlusConfig.replaceF3) {
                 if (!compactHudEnabled)
                     return;
             } else {
@@ -211,7 +209,7 @@ public class CompactF3Plus {
             }
 
             Font font = mc.font;
-            boolean useColors = CompactF3PlusConfig.colorIndicators.get();
+            boolean useColors = CompactF3PlusConfig.colorIndicators;
             currentLineIndex = 0;
 
             int fps = mc.getFps();
@@ -238,30 +236,21 @@ public class CompactF3Plus {
             }
 
             // FPS
-            if (CompactF3PlusConfig.showFps.get()) {
+            if (CompactF3PlusConfig.showFps) {
                 float msPerFrame = 1000f / fps;
 
-                // We only need a minimum of say, 10 seconds of history to start calculating an
-                // average effectively.
-                // It will continue building up to AVG_FPS_SECONDS (60 seconds).
                 if (useColors) {
                     int fpsColor;
                     if (fpsHistory.size() >= 10 && avgFps > 0) {
                         float ratio = (float) fps / (float) avgFps;
-                        // green if fps is at least 80% of average
                         if (ratio >= 0.80f) {
                             fpsColor = 0x55FF55;
-                        }
-                        // yellow if fps is between 50% and 80% of average
-                        else if (ratio >= 0.50f) {
+                        } else if (ratio >= 0.50f) {
                             fpsColor = 0xFFFF55;
-                        }
-                        // red if fps is below 50% of average
-                        else {
+                        } else {
                             fpsColor = 0xFF5555;
                         }
                     } else {
-                        // fallback while buffer is filling
                         if (fps > 60)
                             fpsColor = 0x55FF55;
                         else if (fps >= 30)
@@ -281,9 +270,9 @@ public class CompactF3Plus {
             }
 
             // System (RAM / Lag / TPS)
-            boolean showSys = CompactF3PlusConfig.showSystem.get();
-            boolean showLag = CompactF3PlusConfig.showLag.get();
-            boolean showTps = CompactF3PlusConfig.showTps.get();
+            boolean showSys = CompactF3PlusConfig.showSystem;
+            boolean showLag = CompactF3PlusConfig.showLag;
+            boolean showTps = CompactF3PlusConfig.showTps;
 
             if (showSys || showLag || showTps) {
                 List<TextSegment> sysSegs = new ArrayList<>();
@@ -303,7 +292,7 @@ public class CompactF3Plus {
                     int framesToCheck = Math.min(framesCollected, Math.max(10, avgFps));
                     if (framesToCheck > 0 && avgFps > 0) {
                         double expectedMs = 1000.0 / avgFps;
-                        double stutterThreshold = Math.max(expectedMs * 2.0, 16.6); // at least 16.6ms to be a stutter
+                        double stutterThreshold = Math.max(expectedMs * 2.0, 16.6);
                         int startIdx = frameTimeIdx - framesToCheck;
                         if (startIdx < 0)
                             startIdx += STUTTER_HISTORY_SIZE;
@@ -365,14 +354,14 @@ public class CompactF3Plus {
             }
 
             // Coordinates
-            if (CompactF3PlusConfig.showCoords.get()) {
+            if (CompactF3PlusConfig.showCoords) {
                 nextLine().addSegment("XYZ: " + (Math.round(player.getX() * 10) / 10.0) + ", "
                         + (Math.round(player.getY() * 10) / 10.0) + ", "
                         + (Math.round(player.getZ() * 10) / 10.0));
             }
 
             // Subchunk / Slime
-            if (CompactF3PlusConfig.showSubchunk.get()) {
+            if (CompactF3PlusConfig.showSubchunk) {
                 BlockPos pos = player.blockPosition();
                 int cx = pos.getX() >> 4;
                 int cy = pos.getY() >> 4;
@@ -390,17 +379,14 @@ public class CompactF3Plus {
                         java.util.Random rnd = new java.util.Random(l);
                         boolean isSlime = rnd.nextInt(10) == 0;
                         subchunkLine += " | Slime Chunk: " + (isSlime ? "Yes" : "No");
-                    } catch (Exception e) {
-                        // Ignore
+                    } catch (Exception ignored) {
                     }
                 }
                 nextLine().addSegment(subchunkLine);
             }
 
-            // Local Difficulty — 26.1: getCurrentDifficultyAt was moved to ServerLevel
-            // only. We can compute it on the integrated server (singleplayer); on
-            // dedicated servers the client has no way to derive it, so we skip the line.
-            if (CompactF3PlusConfig.showLocalDifficulty.get()) {
+            // Local Difficulty — 26.1: only on ServerLevel (singleplayer-only).
+            if (CompactF3PlusConfig.showLocalDifficulty) {
                 IntegratedServer ldServer = mc.getSingleplayerServer();
                 if (ldServer != null) {
                     ServerLevel sl = ldServer.getLevel(player.level().dimension());
@@ -416,7 +402,7 @@ public class CompactF3Plus {
             }
 
             // Entities
-            if (CompactF3PlusConfig.showEntities.get()) {
+            if (CompactF3PlusConfig.showEntities) {
                 String debugEntities = mc.levelRenderer.getEntityStatistics();
                 String eCount = debugEntities;
                 int commaIdx = debugEntities.indexOf(',');
@@ -428,8 +414,8 @@ public class CompactF3Plus {
             }
 
             // Session + Ping
-            boolean showSes = CompactF3PlusConfig.showSession.get();
-            boolean showPing = CompactF3PlusConfig.showPing.get();
+            boolean showSes = CompactF3PlusConfig.showSession;
+            boolean showPing = CompactF3PlusConfig.showPing;
             if (showSes || showPing) {
                 String sessionLine = "";
                 if (showSes) {
@@ -459,7 +445,7 @@ public class CompactF3Plus {
             }
 
             // Speed
-            if (CompactF3PlusConfig.showSpeed.get()) {
+            if (CompactF3PlusConfig.showSpeed) {
                 Vec3 now = player.position();
                 Vec3 prev = new Vec3(player.xo, player.yo, player.zo);
                 double dx = now.x - prev.x;
@@ -469,7 +455,7 @@ public class CompactF3Plus {
                 double speedHorizontal = Math.sqrt(dx * dx + dz * dz) * 20.0;
                 double speedVertical = dy * 20.0;
 
-                if (CompactF3PlusConfig.detailedSpeed.get()) {
+                if (CompactF3PlusConfig.detailedSpeed) {
                     double speedKmh = speed * 3.6;
                     double speedKmhHorizontal = speedHorizontal * 3.6;
                     double speedKmhVertical = speedVertical * 3.6;
@@ -489,25 +475,25 @@ public class CompactF3Plus {
             }
 
             // Facing
-            if (CompactF3PlusConfig.showFacing.get()) {
+            if (CompactF3PlusConfig.showFacing) {
                 float yaw = player.getYRot() % 360;
                 if (yaw < 0)
                     yaw += 360;
                 String[] dirs = { "South", "Southwest", "West", "Northwest", "North", "Northeast", "East",
                         "Southeast" };
                 String direction = dirs[Math.round(yaw / 45f) % 8];
-                nextLine().addSegment("Facing: " + direction + " (" + (Math.round(yaw * 10) / 10.0) + "\u00B0)");
+                nextLine().addSegment("Facing: " + direction + " (" + (Math.round(yaw * 10) / 10.0) + "°)");
             }
 
             // Pitch
-            if (CompactF3PlusConfig.showPitch.get()) {
+            if (CompactF3PlusConfig.showPitch) {
                 float pitch = player.getXRot();
-                nextLine().addSegment("Pitch: " + (Math.round(pitch * 10) / 10.0) + "\u00B0");
+                nextLine().addSegment("Pitch: " + (Math.round(pitch * 10) / 10.0) + "°");
             }
 
             // Time + Day
-            boolean bTime = CompactF3PlusConfig.showTime.get();
-            boolean bDay = CompactF3PlusConfig.showDay.get();
+            boolean bTime = CompactF3PlusConfig.showTime;
+            boolean bDay = CompactF3PlusConfig.showDay;
             if (bTime || bDay) {
                 long totalTicks = player.level().getOverworldClockTime();
                 String timeLine = "";
@@ -529,7 +515,7 @@ public class CompactF3Plus {
             }
 
             // Light
-            if (CompactF3PlusConfig.showLight.get()) {
+            if (CompactF3PlusConfig.showLight) {
                 BlockPos blockPos = player.blockPosition();
                 int blockLight = player.level().getBrightness(LightLayer.BLOCK, blockPos);
                 int skyLight = player.level().getBrightness(LightLayer.SKY, blockPos);
@@ -537,14 +523,14 @@ public class CompactF3Plus {
             }
 
             // Biome
-            if (CompactF3PlusConfig.showBiome.get()) {
+            if (CompactF3PlusConfig.showBiome) {
                 ResourceKey<Biome> biomeKey = player.level().getBiome(player.blockPosition()).unwrapKey().orElse(null);
                 String biome = biomeKey != null ? biomeKey.identifier().toString() : "unknown";
                 nextLine().addSegment("Biome: " + biome);
             }
 
             // Dimension
-            if (CompactF3PlusConfig.showDimension.get()) {
+            if (CompactF3PlusConfig.showDimension) {
                 String dimension = player.level().dimension().identifier().toString();
                 nextLine().addSegment("Dimension: " + dimension);
             }
@@ -568,26 +554,25 @@ public class CompactF3Plus {
             }
             int padding = 4;
 
-            int opacitySetting = CompactF3PlusConfig.backgroundOpacity.get();
+            int opacitySetting = CompactF3PlusConfig.backgroundOpacity;
             int alphaInt = (int) ((opacitySetting / 100.0f) * 255.0f);
             int bgColor = (alphaInt << 24) | 0x000000;
 
-            event.getGuiGraphics().fill(
+            guiGraphics.fill(
                     drawX - padding,
                     drawY - padding,
                     drawX + maxWidth + padding,
                     drawY + currentLineIndex * lineHeight + padding,
                     bgColor);
 
-            boolean drawShadow = CompactF3PlusConfig.textShadow.get();
+            boolean drawShadow = CompactF3PlusConfig.textShadow;
             for (int i = 0; i < currentLineIndex; i++) {
                 HudLine line = lines.get(i);
                 int x = drawX;
                 for (int j = 0; j < line.currentSegmentIndex; j++) {
                     TextSegment seg = line.segments.get(j);
-                    // 26.1: GuiGraphicsExtractor#text silently skips alpha=0 colors,
-                    // so opaque alpha must be present in the high byte.
-                    event.getGuiGraphics().text(font, seg.text, x, drawY, seg.color | 0xFF000000, drawShadow);
+                    // GuiGraphicsExtractor#text silently skips alpha=0 — force opaque.
+                    guiGraphics.text(font, seg.text, x, drawY, seg.color | 0xFF000000, drawShadow);
                     x += font.width(seg.text);
                 }
                 drawY += lineHeight;

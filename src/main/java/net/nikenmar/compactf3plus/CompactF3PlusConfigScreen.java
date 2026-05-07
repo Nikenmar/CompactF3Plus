@@ -6,10 +6,13 @@ import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import net.neoforged.neoforge.common.ModConfigSpec;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.IntConsumer;
+import java.util.function.IntSupplier;
 
 public class CompactF3PlusConfigScreen extends Screen {
     private final Screen parent;
@@ -37,39 +40,47 @@ public class CompactF3PlusConfigScreen extends Screen {
         this.parent = parent;
     }
 
+    public static CompactF3PlusConfigScreen create(Screen parent) {
+        return new CompactF3PlusConfigScreen(parent);
+    }
+
     @Override
     protected void init() {
         entries.clear();
 
         entries.add(new HeaderEntry("HUD Sections"));
-        entries.add(new ToggleEntry("Show FPS", CompactF3PlusConfig.showFps));
-        entries.add(new ToggleEntry("Show RAM", CompactF3PlusConfig.showSystem));
-        entries.add(new ToggleEntry("Show Lag", CompactF3PlusConfig.showLag));
-        entries.add(new ToggleEntry("Show TPS", CompactF3PlusConfig.showTps));
-        entries.add(new ToggleEntry("Show Coordinates", CompactF3PlusConfig.showCoords));
-        entries.add(new ToggleEntry("Show Subchunk/Slime", CompactF3PlusConfig.showSubchunk));
-        entries.add(new ToggleEntry("Show Local Difficulty", CompactF3PlusConfig.showLocalDifficulty));
-        entries.add(new ToggleEntry("Show Entities Count", CompactF3PlusConfig.showEntities));
-        entries.add(new ToggleEntry("Show Session", CompactF3PlusConfig.showSession));
-        entries.add(new ToggleEntry("Show Ping", CompactF3PlusConfig.showPing));
-        entries.add(new ToggleEntry("Show Speed", CompactF3PlusConfig.showSpeed));
-        entries.add(new ToggleEntry("Show Facing", CompactF3PlusConfig.showFacing));
-        entries.add(new ToggleEntry("Show Pitch (Angle)", CompactF3PlusConfig.showPitch));
-        entries.add(new ToggleEntry("Show Time", CompactF3PlusConfig.showTime));
-        entries.add(new ToggleEntry("Show Day", CompactF3PlusConfig.showDay));
-        entries.add(new ToggleEntry("Show Light", CompactF3PlusConfig.showLight));
-        entries.add(new ToggleEntry("Show Biome", CompactF3PlusConfig.showBiome));
-        entries.add(new ToggleEntry("Show Dimension", CompactF3PlusConfig.showDimension));
+        entries.add(toggle("Show FPS",            () -> CompactF3PlusConfig.showFps,            v -> CompactF3PlusConfig.showFps = v));
+        entries.add(toggle("Show RAM",            () -> CompactF3PlusConfig.showSystem,         v -> CompactF3PlusConfig.showSystem = v));
+        entries.add(toggle("Show Lag",            () -> CompactF3PlusConfig.showLag,            v -> CompactF3PlusConfig.showLag = v));
+        entries.add(toggle("Show TPS",            () -> CompactF3PlusConfig.showTps,            v -> CompactF3PlusConfig.showTps = v));
+        entries.add(toggle("Show Coordinates",    () -> CompactF3PlusConfig.showCoords,         v -> CompactF3PlusConfig.showCoords = v));
+        entries.add(toggle("Show Subchunk/Slime", () -> CompactF3PlusConfig.showSubchunk,       v -> CompactF3PlusConfig.showSubchunk = v));
+        entries.add(toggle("Show Local Difficulty", () -> CompactF3PlusConfig.showLocalDifficulty, v -> CompactF3PlusConfig.showLocalDifficulty = v));
+        entries.add(toggle("Show Entities Count", () -> CompactF3PlusConfig.showEntities,       v -> CompactF3PlusConfig.showEntities = v));
+        entries.add(toggle("Show Session",        () -> CompactF3PlusConfig.showSession,        v -> CompactF3PlusConfig.showSession = v));
+        entries.add(toggle("Show Ping",           () -> CompactF3PlusConfig.showPing,           v -> CompactF3PlusConfig.showPing = v));
+        entries.add(toggle("Show Speed",          () -> CompactF3PlusConfig.showSpeed,          v -> CompactF3PlusConfig.showSpeed = v));
+        entries.add(toggle("Show Facing",         () -> CompactF3PlusConfig.showFacing,         v -> CompactF3PlusConfig.showFacing = v));
+        entries.add(toggle("Show Pitch (Angle)",  () -> CompactF3PlusConfig.showPitch,          v -> CompactF3PlusConfig.showPitch = v));
+        entries.add(toggle("Show Time",           () -> CompactF3PlusConfig.showTime,           v -> CompactF3PlusConfig.showTime = v));
+        entries.add(toggle("Show Day",            () -> CompactF3PlusConfig.showDay,            v -> CompactF3PlusConfig.showDay = v));
+        entries.add(toggle("Show Light",          () -> CompactF3PlusConfig.showLight,          v -> CompactF3PlusConfig.showLight = v));
+        entries.add(toggle("Show Biome",          () -> CompactF3PlusConfig.showBiome,          v -> CompactF3PlusConfig.showBiome = v));
+        entries.add(toggle("Show Dimension",      () -> CompactF3PlusConfig.showDimension,      v -> CompactF3PlusConfig.showDimension = v));
         entries.add(new HeaderEntry("Other"));
-        entries.add(new ToggleEntry("Replace Default F3", CompactF3PlusConfig.replaceF3));
-        entries.add(new ToggleEntry("Show Gizmo (if Replace F3)", CompactF3PlusConfig.showGizmo));
-        entries.add(new ToggleEntry("Enabled by Default", CompactF3PlusConfig.enabledByDefault));
-        entries.add(new ToggleEntry("Color Indicators (FPS/TPS)", CompactF3PlusConfig.colorIndicators));
-        entries.add(new ToggleEntry("Text Shadow", CompactF3PlusConfig.textShadow));
-        entries.add(new ToggleEntry("Detailed Speed", CompactF3PlusConfig.detailedSpeed));
-        entries.add(new CycleOpacityEntry("Background Opacity", CompactF3PlusConfig.backgroundOpacity));
+        entries.add(toggle("Replace Default F3",          () -> CompactF3PlusConfig.replaceF3,         v -> CompactF3PlusConfig.replaceF3 = v));
+        entries.add(toggle("Show Gizmo (if Replace F3)",  () -> CompactF3PlusConfig.showGizmo,         v -> CompactF3PlusConfig.showGizmo = v));
+        entries.add(toggle("Enabled by Default",          () -> CompactF3PlusConfig.enabledByDefault,  v -> CompactF3PlusConfig.enabledByDefault = v));
+        entries.add(toggle("Color Indicators (FPS/TPS)",  () -> CompactF3PlusConfig.colorIndicators,   v -> CompactF3PlusConfig.colorIndicators = v));
+        entries.add(toggle("Text Shadow",                 () -> CompactF3PlusConfig.textShadow,        v -> CompactF3PlusConfig.textShadow = v));
+        entries.add(toggle("Detailed Speed",              () -> CompactF3PlusConfig.detailedSpeed,     v -> CompactF3PlusConfig.detailedSpeed = v));
+        entries.add(new IntEntry("Background Opacity", () -> CompactF3PlusConfig.backgroundOpacity, v -> CompactF3PlusConfig.backgroundOpacity = v));
 
         layoutButtons();
+    }
+
+    private static ToggleEntry toggle(String label, BooleanSupplier get, Consumer<Boolean> set) {
+        return new ToggleEntry(label, get, set);
     }
 
     private void layoutButtons() {
@@ -87,30 +98,31 @@ public class CompactF3PlusConfigScreen extends Screen {
             ConfigEntry entry = entries.get(i);
             if (entry instanceof ToggleEntry toggle) {
                 addRenderableWidget(Button.builder(
-                        Component.literal(toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")),
+                        Component.literal(toggle.label + ": " + (toggle.get.getAsBoolean() ? "ON" : "OFF")),
                         btn -> {
-                            toggle.value.set(!toggle.value.get());
-                            CompactF3PlusConfig.SPEC.save();
+                            boolean next = !toggle.get.getAsBoolean();
+                            toggle.set.accept(next);
+                            CompactF3PlusConfig.save();
                             btn.setMessage(Component.literal(
-                                    toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")));
+                                    toggle.label + ": " + (next ? "ON" : "OFF")));
                         })
                         .bounds(centerX, y, btnWidth, btnHeight)
                         .build());
-            } else if (entry instanceof CycleOpacityEntry opacity) {
+            } else if (entry instanceof IntEntry opacity) {
                 addRenderableWidget(new AbstractSliderButton(centerX, y, btnWidth, btnHeight,
-                        Component.literal(opacity.label + ": " + opacity.value.get() + "%"),
-                        opacity.value.get() / 100.0D) {
+                        Component.literal(opacity.label + ": " + opacity.get.getAsInt() + "%"),
+                        opacity.get.getAsInt() / 100.0D) {
 
                     @Override
                     protected void updateMessage() {
-                        this.setMessage(Component.literal(opacity.label + ": " + opacity.value.get() + "%"));
+                        this.setMessage(Component.literal(opacity.label + ": " + opacity.get.getAsInt() + "%"));
                     }
 
                     @Override
                     protected void applyValue() {
                         int newValue = (int) Math.round(this.value * 100.0D);
-                        opacity.value.set(newValue);
-                        CompactF3PlusConfig.SPEC.save();
+                        opacity.set.accept(newValue);
+                        CompactF3PlusConfig.save();
                     }
                 });
             }
@@ -118,7 +130,7 @@ public class CompactF3PlusConfigScreen extends Screen {
 
         addRenderableWidget(Button.builder(Component.literal("Reset to Default"), btn -> {
             CompactF3PlusConfig.resetToDefaults();
-            layoutButtons(); // Refresh the screen buttons to reflect the default values
+            layoutButtons();
         })
                 .bounds(width / 2 - 155, height - 28, 150, 20)
                 .build());
@@ -217,9 +229,9 @@ public class CompactF3PlusConfigScreen extends Screen {
     private record HeaderEntry(String title) implements ConfigEntry {
     }
 
-    private record ToggleEntry(String label, ModConfigSpec.BooleanValue value) implements ConfigEntry {
+    private record ToggleEntry(String label, BooleanSupplier get, Consumer<Boolean> set) implements ConfigEntry {
     }
 
-    private record CycleOpacityEntry(String label, ModConfigSpec.IntValue value) implements ConfigEntry {
+    private record IntEntry(String label, IntSupplier get, IntConsumer set) implements ConfigEntry {
     }
 }
