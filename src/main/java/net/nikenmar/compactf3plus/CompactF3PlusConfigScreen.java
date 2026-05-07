@@ -1,9 +1,10 @@
 package net.nikenmar.compactf3plus;
 
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
@@ -128,15 +129,16 @@ public class CompactF3PlusConfigScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-        guiGraphics.drawCenteredString(font, title, width / 2, 15, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
+        // 26.1: GuiGraphicsExtractor#text drops alpha=0 colors silently — use ARGB.
+        guiGraphics.centeredText(font, title, width / 2, 15, 0xFFFFFFFF);
 
         for (int i = 0; i < entries.size(); i++) {
             if (entries.get(i) instanceof HeaderEntry header) {
                 int y = CONTENT_TOP + i * SPACING - scrollOffset + 6;
                 if (y >= CONTENT_TOP && y <= height - 50) {
-                    guiGraphics.drawCenteredString(font, header.title, width / 2, y, 0xAAAAAA);
+                    guiGraphics.centeredText(font, header.title, width / 2, y, 0xFFAAAAAA);
                 }
             }
         }
@@ -165,9 +167,11 @@ public class CompactF3PlusConfigScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && getMaxScroll() > 0) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() == 0 && getMaxScroll() > 0) {
             int trackX = width / 2 + 110;
+            double mouseX = event.x();
+            double mouseY = event.y();
             if (mouseX >= trackX && mouseX <= trackX + SCROLLBAR_WIDTH
                     && mouseY >= CONTENT_TOP && mouseY <= height - 50) {
                 draggingScrollbar = true;
@@ -175,23 +179,23 @@ public class CompactF3PlusConfigScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 0)
+    public boolean mouseReleased(MouseButtonEvent event) {
+        if (event.button() == 0)
             draggingScrollbar = false;
-        return super.mouseReleased(mouseX, mouseY, button);
+        return super.mouseReleased(event);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
         if (draggingScrollbar) {
-            scrollToMouse(mouseY);
+            scrollToMouse(event.y());
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return super.mouseDragged(event, dragX, dragY);
     }
 
     private void scrollToMouse(double mouseY) {

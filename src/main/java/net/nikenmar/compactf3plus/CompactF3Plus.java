@@ -4,11 +4,15 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.components.debug.DebugScreenEntries;
+import net.minecraft.client.gui.components.debug.DebugScreenEntryStatus;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.phys.Vec3;
@@ -20,8 +24,6 @@ import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
-import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -35,15 +37,32 @@ public class CompactF3Plus {
         modContainer.registerExtensionPoint(IConfigScreenFactory.class,
                 (container, parent) -> new CompactF3PlusConfigScreen(parent));
         modBus.addListener(HudRenderer::onRegisterKeyMappings);
+        // RenderGuiEvent.Pre fires before vanilla draws the HUD — we detect the F3
+        // toggle and force the overlay back off here so vanilla never gets a chance
+        // to render its own debug screen this frame (no 1-frame flicker).
+        NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiPre);
         NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGui);
-        NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiLayerPre);
-        NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiLayerPost);
+        // showGizmo is currently inert on this branch (vanilla 3D gizmo requires a
+        // CameraRenderState we don't yet plumb through) — flag retained for forward
+        // compatibility once we render our own gizmo.
         NeoForge.EVENT_BUS.addListener(HudRenderer::onPlayerLogin);
     }
 
     private static final class HudRenderer {
         private static boolean compactHudEnabled = false;
+        // True when the active HUD session was opened by pressing F3 (replaceF3 mode).
+        // F8 and enabledByDefault do not set this — they open the HUD in "plain" mode
+        // without the 3D gizmo even if showGizmo is on.
+        private static boolean compactHudOpenedViaF3 = false;
         private static boolean wasDebugShowing = false;
+        // While replaceF3 is on we OWN the THREE_DIMENSIONAL_CROSSHAIR debug entry
+        // unconditionally (ALWAYS_ON when our gizmo is wanted, NEVER otherwise).
+        // setStatus persists to disk, so we only call it on transitions. Initial
+        // value `true` forces a setStatus(NEVER) on the first frame after world entry,
+        // which clears any stale ALWAYS_ON left over from a previous session crash.
+        // Trade-off: while replaceF3=on, the user cannot independently keep the
+        // vanilla 3D crosshair always-on — that's by design (replaceF3=off if they want).
+        private static boolean lastGizmoApplied = true;
         private static final int AVG_FPS_SECONDS = 60;
         private static final LinkedList<Integer> fpsHistory = new LinkedList<>();
         private static long lastFpsSampleTime = 0;
@@ -55,11 +74,16 @@ public class CompactF3Plus {
         private static long lastFrameTimeNano = System.nanoTime();
 
         private static final long sessionStartTime = System.currentTimeMillis();
+        // Constructed directly via the record constructor; registered with NeoForge
+        // through RegisterKeyMappingsEvent#registerCategory in onRegisterKeyMappings
+        // (KeyMapping.Category.register(Identifier) is deprecated in 26.1).
+        private static final KeyMapping.Category COMPACT_F3_CATEGORY =
+                new KeyMapping.Category(Identifier.fromNamespaceAndPath("compactf3plus", "main"));
         private static final KeyMapping TOGGLE_HUD = new KeyMapping(
                 "key.compactf3plus.toggleHud",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_F8,
-                "key.categories.compactf3plus");
+                COMPACT_F3_CATEGORY);
 
         // Reusable Object Pools
         private static final List<HudLine> lines = new ArrayList<>();
@@ -117,62 +141,67 @@ public class CompactF3Plus {
         }
 
         public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
+            event.registerCategory(COMPACT_F3_CATEGORY);
             event.register(TOGGLE_HUD);
         }
 
         public static void onPlayerLogin(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
             compactHudEnabled = CompactF3PlusConfig.enabledByDefault.get();
+            compactHudOpenedViaF3 = false;
         }
 
-        private static boolean toggledForCrosshair = false;
+        public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
+            // Run the F3 toggle detection BEFORE any HUD rendering this frame.
+            // Setting overlay visibility false here means vanilla's debug overlay
+            // never renders on the same frame the F3 key was processed.
+            Minecraft mc = Minecraft.getInstance();
+            if (CompactF3PlusConfig.replaceF3.get()) {
+                boolean debugShowing = mc.debugEntries.isOverlayVisible();
+                if (debugShowing != wasDebugShowing) {
+                    compactHudEnabled = !compactHudEnabled;
+                    // True if F3 just opened the HUD; false if F3 just closed it.
+                    compactHudOpenedViaF3 = compactHudEnabled;
+                }
+                if (debugShowing) {
+                    mc.debugEntries.setOverlayVisible(false);
+                }
+                wasDebugShowing = false;
+            }
+            updateGizmoState(mc);
+        }
 
-        public static void onRenderGuiLayerPre(RenderGuiLayerEvent.Pre event) {
+        // Drives the vanilla 3D-crosshair debug entry. Vanilla GameRenderer renders
+        // the gizmo when DebugScreenEntries.THREE_DIMENSIONAL_CROSSHAIR is enabled,
+        // independently from the main F3 overlay — so we can keep F3 hidden while the
+        // gizmo shows. setStatus persists to disk, so we only call it on transitions.
+        private static void updateGizmoState(Minecraft mc) {
             if (!CompactF3PlusConfig.replaceF3.get())
                 return;
-
-            if (event.getName().equals(VanillaGuiLayers.DEBUG_OVERLAY)) {
-                event.setCanceled(true);
-            }
-
-            if (!CompactF3PlusConfig.showGizmo.get()
-                    && event.getName().equals(VanillaGuiLayers.CROSSHAIR)
-                    && Minecraft.getInstance().getDebugOverlay().showDebugScreen()) {
-
-                // Temporarily disable the debug overlay state before the crosshair layer
-                // renders
-                Minecraft.getInstance().getDebugOverlay().toggleOverlay();
-                toggledForCrosshair = true;
-            }
-        }
-
-        public static void onRenderGuiLayerPost(RenderGuiLayerEvent.Post event) {
-            if (toggledForCrosshair && event.getName().equals(VanillaGuiLayers.CROSSHAIR)) {
-                // Restore the debug overlay state after the crosshair layer finishes rendering
-                Minecraft.getInstance().getDebugOverlay().toggleOverlay();
-                toggledForCrosshair = false;
+            boolean wantGizmo = CompactF3PlusConfig.showGizmo.get()
+                    && compactHudEnabled
+                    && compactHudOpenedViaF3;
+            if (wantGizmo != lastGizmoApplied) {
+                mc.debugEntries.setStatus(DebugScreenEntries.THREE_DIMENSIONAL_CROSSHAIR,
+                        wantGizmo ? DebugScreenEntryStatus.ALWAYS_ON : DebugScreenEntryStatus.NEVER);
+                lastGizmoApplied = wantGizmo;
             }
         }
 
         public static void onRenderGui(RenderGuiEvent.Post event) {
             Minecraft mc = Minecraft.getInstance();
-            if (TOGGLE_HUD.consumeClick())
+            if (TOGGLE_HUD.consumeClick()) {
                 compactHudEnabled = !compactHudEnabled;
+                compactHudOpenedViaF3 = false;
+            }
             LocalPlayer player = mc.player;
             if (player == null || mc.options.hideGui)
                 return;
 
-            boolean debugShowing = mc.getDebugOverlay().showDebugScreen();
+            // replaceF3=on path: state machine is driven by onRenderGuiPre. Just bail
+            // if compact HUD isn't active for this frame.
+            // replaceF3=off path: don't render our HUD while vanilla F3 is open.
+            boolean debugShowing = mc.debugEntries.isOverlayVisible();
             if (CompactF3PlusConfig.replaceF3.get()) {
-                if (debugShowing != wasDebugShowing) {
-                    compactHudEnabled = !compactHudEnabled;
-                    wasDebugShowing = debugShowing;
-                }
-
-                if (!compactHudEnabled && debugShowing) {
-                    mc.getDebugOverlay().toggleOverlay();
-                    wasDebugShowing = false;
-                }
-
                 if (!compactHudEnabled)
                     return;
             } else {
@@ -354,7 +383,8 @@ public class CompactF3Plus {
                 IntegratedServer server = mc.getSingleplayerServer();
                 if (server != null) {
                     try {
-                        long seed = server.getWorldData().worldGenOptions().seed();
+                        ServerLevel overworld = server.overworld();
+                        long seed = overworld != null ? overworld.getSeed() : 0L;
                         long l = seed + (long) (cx * cx * 4987142) + (long) (cx * 5947611) + (long) (cz * cz) * 4392871L
                                 + (long) (cz * 389711) ^ 987234911L;
                         java.util.Random rnd = new java.util.Random(l);
@@ -367,14 +397,22 @@ public class CompactF3Plus {
                 nextLine().addSegment(subchunkLine);
             }
 
-            // Local Difficulty
+            // Local Difficulty — 26.1: getCurrentDifficultyAt was moved to ServerLevel
+            // only. We can compute it on the integrated server (singleplayer); on
+            // dedicated servers the client has no way to derive it, so we skip the line.
             if (CompactF3PlusConfig.showLocalDifficulty.get()) {
-                net.minecraft.world.DifficultyInstance diff = player.level()
-                        .getCurrentDifficultyAt(player.blockPosition());
-                float effective = diff.getEffectiveDifficulty();
-                float special = diff.getSpecialMultiplier();
-                nextLine().addSegment("Local Diff: " + (Math.round(effective * 100) / 100.0) + " | "
-                        + (Math.round(special * 100) / 100.0));
+                IntegratedServer ldServer = mc.getSingleplayerServer();
+                if (ldServer != null) {
+                    ServerLevel sl = ldServer.getLevel(player.level().dimension());
+                    if (sl != null) {
+                        net.minecraft.world.DifficultyInstance diff = sl
+                                .getCurrentDifficultyAt(player.blockPosition());
+                        float effective = diff.getEffectiveDifficulty();
+                        float special = diff.getSpecialMultiplier();
+                        nextLine().addSegment("Local Diff: " + (Math.round(effective * 100) / 100.0) + " | "
+                                + (Math.round(special * 100) / 100.0));
+                    }
+                }
             }
 
             // Entities
@@ -471,7 +509,7 @@ public class CompactF3Plus {
             boolean bTime = CompactF3PlusConfig.showTime.get();
             boolean bDay = CompactF3PlusConfig.showDay.get();
             if (bTime || bDay) {
-                long totalTicks = player.level().getDayTime();
+                long totalTicks = player.level().getOverworldClockTime();
                 String timeLine = "";
                 if (bTime) {
                     long ticks = totalTicks % 24000;
@@ -501,13 +539,13 @@ public class CompactF3Plus {
             // Biome
             if (CompactF3PlusConfig.showBiome.get()) {
                 ResourceKey<Biome> biomeKey = player.level().getBiome(player.blockPosition()).unwrapKey().orElse(null);
-                String biome = biomeKey != null ? biomeKey.location().toString() : "unknown";
+                String biome = biomeKey != null ? biomeKey.identifier().toString() : "unknown";
                 nextLine().addSegment("Biome: " + biome);
             }
 
             // Dimension
             if (CompactF3PlusConfig.showDimension.get()) {
-                String dimension = player.level().dimension().location().toString();
+                String dimension = player.level().dimension().identifier().toString();
                 nextLine().addSegment("Dimension: " + dimension);
             }
 
@@ -547,7 +585,9 @@ public class CompactF3Plus {
                 int x = drawX;
                 for (int j = 0; j < line.currentSegmentIndex; j++) {
                     TextSegment seg = line.segments.get(j);
-                    event.getGuiGraphics().drawString(font, seg.text, x, drawY, seg.color, drawShadow);
+                    // 26.1: GuiGraphicsExtractor#text silently skips alpha=0 colors,
+                    // so opaque alpha must be present in the high byte.
+                    event.getGuiGraphics().text(font, seg.text, x, drawY, seg.color | 0xFF000000, drawShadow);
                     x += font.width(seg.text);
                 }
                 drawY += lineHeight;
