@@ -1,16 +1,13 @@
-[
-{
-  "modid": "${mod_id}",
-  "name": "${mod_name}",
-  "description": "${mod_description}",
-  "version": "${mod_version}",
-  "mcversion": "${minecraft_version}",
+[{
+  "modid": "compactf3plus",
+  "name": "Compact F3 Plus",
+  "description": "Replaces the bulky F3 debug screen with a compact, configurable HUD overlay.",
+  "version": "${version}",
+  "mcversion": "1.7.10",
   "url": "",
-  "updateUrl": "",
-  "authorList": ["${mod_authors}"],
+  "authorList": ["Nikenmar"],
   "credits": "",
   "logoFile": "",
   "screenshots": [],
   "dependencies": []
-}
-]
+}]

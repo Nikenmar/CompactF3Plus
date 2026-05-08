@@ -1,8 +1,7 @@
 package net.nikenmar.compactf3plus;
 
 import net.minecraftforge.common.config.Configuration;
-import net.minecraftforge.common.config.Property;
-import net.minecraftforge.fml.common.Loader;
+import cpw.mods.fml.common.Loader;
 
 import java.io.File;
 
@@ -15,7 +14,6 @@ public class CompactF3PlusConfig {
     public static boolean showTps = false;
     public static boolean showCoords = true;
     public static boolean showSubchunk = false;
-    public static boolean showLocalDifficulty = false;
     public static boolean showEntities = false;
     public static boolean showSession = true;
     public static boolean showPing = true;
@@ -32,7 +30,6 @@ public class CompactF3PlusConfig {
     public static boolean colorIndicators = false;
     public static boolean textShadow = false;
     public static boolean replaceF3 = true;
-    public static boolean showGizmo = false;
     public static boolean enabledByDefault = false;
     public static int backgroundOpacity = 25;
 
@@ -46,7 +43,6 @@ public class CompactF3PlusConfig {
 
     public static void syncConfig() {
         try {
-
             String cSections = "HUD Sections";
             config.setCategoryComment(cSections, "Toggle which lines and sections are visible on the HUD.");
 
@@ -56,7 +52,6 @@ public class CompactF3PlusConfig {
             showTps = config.getBoolean("Show TPS", cSections, false, "Show TPS line");
             showCoords = config.getBoolean("Show Coordinates", cSections, true, "Show XYZ coordinates line");
             showSubchunk = config.getBoolean("Show Chunk/Slime", cSections, false, "Show chunk/slime info line");
-            showLocalDifficulty = config.getBoolean("Show Local Difficulty", cSections, false, "Show local difficulty line");
             showEntities = config.getBoolean("Show Entities Count", cSections, false, "Show entities count line");
             showSession = config.getBoolean("Show Session", cSections, true, "Show session time line");
             showPing = config.getBoolean("Show Ping", cSections, true, "Show ping line");
@@ -76,7 +71,6 @@ public class CompactF3PlusConfig {
             colorIndicators = config.getBoolean("Color Indicators", cVisuals, false, "Color-code FPS and TPS values");
             textShadow = config.getBoolean("Text Shadow", cVisuals, false, "Render text with shadow");
             replaceF3 = config.getBoolean("Replace Default F3", cVisuals, true, "Replace the default F3 debug screen");
-            showGizmo = config.getBoolean("Show Gizmo", cVisuals, false, "Show the XYZ axis gizmo when F3 is replaced");
             enabledByDefault = config.getBoolean("Enabled by Default", cVisuals, false, "Enable HUD by default");
             backgroundOpacity = config.getInt("Background Opacity", cVisuals, 25, 0, 100, "Background opacity percentage (0-100)");
 
