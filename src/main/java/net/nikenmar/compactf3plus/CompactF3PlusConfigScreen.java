@@ -3,7 +3,7 @@ package net.nikenmar.compactf3plus;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TextComponent;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraftforge.common.ForgeConfigSpec;
 
@@ -32,7 +32,7 @@ public class CompactF3PlusConfigScreen extends Screen {
     }
 
     public CompactF3PlusConfigScreen(Screen parent) {
-        super(Component.literal("Compact F3 Plus Settings"));
+        super(new TextComponent("Compact F3 Plus Settings"));
         this.parent = parent;
     }
 
@@ -88,21 +88,21 @@ public class CompactF3PlusConfigScreen extends Screen {
             if (entry instanceof ToggleEntry toggle) {
                 addRenderableWidget(new Button(
                         centerX, y, btnWidth, btnHeight,
-                        Component.literal(toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")),
+                        new TextComponent(toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")),
                         btn -> {
                             toggle.value.set(!toggle.value.get());
                             CompactF3PlusConfig.SPEC.save();
-                            btn.setMessage(Component.literal(
+                            btn.setMessage(new TextComponent(
                                     toggle.label + ": " + (toggle.value.get() ? "ON" : "OFF")));
                         }));
             } else if (entry instanceof CycleOpacityEntry opacity) {
                 addRenderableWidget(new AbstractSliderButton(centerX, y, btnWidth, btnHeight,
-                        Component.literal(opacity.label + ": " + opacity.value.get() + "%"),
+                        new TextComponent(opacity.label + ": " + opacity.value.get() + "%"),
                         opacity.value.get() / 100.0D) {
 
                     @Override
                     protected void updateMessage() {
-                        this.setMessage(Component.literal(opacity.label + ": " + opacity.value.get() + "%"));
+                        this.setMessage(new TextComponent(opacity.label + ": " + opacity.value.get() + "%"));
                     }
 
                     @Override
@@ -115,12 +115,12 @@ public class CompactF3PlusConfigScreen extends Screen {
             }
         }
 
-        addRenderableWidget(new Button(width / 2 - 155, height - 28, 150, 20, Component.literal("Reset to Default"), btn -> {
+        addRenderableWidget(new Button(width / 2 - 155, height - 28, 150, 20, new TextComponent("Reset to Default"), btn -> {
             CompactF3PlusConfig.resetToDefaults();
             layoutButtons(); // Refresh the screen buttons to reflect the default values
         }));
 
-        addRenderableWidget(new Button(width / 2 + 5, height - 28, 150, 20, Component.literal("Done"), btn -> onClose()));
+        addRenderableWidget(new Button(width / 2 + 5, height - 28, 150, 20, new TextComponent("Done"), btn -> onClose()));
     }
 
     @Override

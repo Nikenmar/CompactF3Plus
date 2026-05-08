@@ -13,16 +13,15 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.client.ConfigScreenHandler;
+import net.minecraftforge.client.ConfigGuiHandler;
+import net.minecraftforge.client.ClientRegistry;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
-import net.minecraftforge.client.event.RenderGuiEvent;
-import net.minecraftforge.client.event.RenderGuiOverlayEvent;
-import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
+import net.minecraftforge.client.event.RenderGameOverlayEvent;
+import net.minecraftforge.event.TickEvent;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -32,22 +31,26 @@ import java.util.List;
 @Mod("compactf3plus")
 public class CompactF3Plus {
     public CompactF3Plus() {
-        var modBus = FMLJavaModLoadingContext.get().getModEventBus();
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, CompactF3PlusConfig.SPEC);
         ModLoadingContext.get().registerExtensionPoint(
-                ConfigScreenHandler.ConfigScreenFactory.class,
-                () -> new ConfigScreenHandler.ConfigScreenFactory(
+                ConfigGuiHandler.ConfigGuiFactory.class,
+                () -> new ConfigGuiHandler.ConfigGuiFactory(
                         (minecraft, screen) -> new CompactF3PlusConfigScreen(screen)));
-        modBus.addListener(HudRenderer::onRegisterKeyMappings);
-        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderGui);
-        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiOverlayPre);
-        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiOverlayPost);
+        ClientRegistry.registerKeyBinding(HudRenderer.TOGGLE_HUD);
+        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderGameOverlayPre);
+        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderGameOverlayPost);
+        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderTick);
         MinecraftForge.EVENT_BUS.addListener(HudRenderer::onPlayerLogin);
     }
 
     private static final class HudRenderer {
         private static boolean compactHudEnabled = false;
-        private static boolean wasDebugShowing = false;
+        // Tracks the last sampled value of mc.options.renderDebug at RenderTick.START,
+        // before we override it. A change between frames means the user pressed F3.
+        private static boolean userF3State = false;
+        // True only while the current compact HUD session was opened via F3 (gates the
+        // 3D crosshair gizmo — F8 sessions never show it).
+        private static boolean compactHudOpenedViaF3 = false;
         private static final int AVG_FPS_SECONDS = 60;
         private static final LinkedList<Integer> fpsHistory = new LinkedList<>();
         private static long lastFpsSampleTime = 0;
@@ -59,7 +62,7 @@ public class CompactF3Plus {
         private static long lastFrameTimeNano = System.nanoTime();
 
         private static long sessionStartTime = System.currentTimeMillis();
-        private static final KeyMapping TOGGLE_HUD = new KeyMapping(
+        static final KeyMapping TOGGLE_HUD = new KeyMapping(
                 "key.compactf3plus.toggleHud",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_F8,
@@ -120,77 +123,74 @@ public class CompactF3Plus {
             }
         }
 
-        public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
-            event.register(TOGGLE_HUD);
-        }
-
-        public static void onPlayerLogin(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
+        public static void onPlayerLogin(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggedInEvent event) {
             compactHudEnabled = CompactF3PlusConfig.enabledByDefault.get();
-            wasDebugShowing = false;
+            userF3State = false;
+            compactHudOpenedViaF3 = false;
             sessionStartTime = System.currentTimeMillis();
         }
 
-        private static boolean toggledForCrosshair = false;
-
-        public static void onRenderGuiOverlayPre(RenderGuiOverlayEvent.Pre event) {
-            Minecraft mc = Minecraft.getInstance();
-            LocalPlayer player = mc.player;
-            if (player == null || mc.options.hideGui)
-                return;
-
+        // RenderTick fires twice per frame: START (before GameRenderer draws the world,
+        // including the 3D crosshair gizmo) and END (after the frame is fully done).
+        // We use START to detect F3 transitions and force renderDebug to the value we
+        // want for THIS frame (controls whether the gizmo is drawn). We use END to
+        // restore renderDebug to the user's true F3 state, so the next START sees the
+        // user's input rather than our forced override.
+        public static void onRenderTick(TickEvent.RenderTickEvent event) {
             if (!CompactF3PlusConfig.replaceF3.get())
                 return;
+            Minecraft mc = Minecraft.getInstance();
 
-            if (event.getOverlay().equals(VanillaGuiOverlay.DEBUG_TEXT.type())) {
+            if (event.phase == TickEvent.Phase.START) {
+                boolean current = mc.options.renderDebug;
+                if (current != userF3State) {
+                    userF3State = current;
+                    compactHudEnabled = !compactHudEnabled;
+                    compactHudOpenedViaF3 = compactHudEnabled;
+                }
+                boolean wantGizmo = compactHudEnabled
+                        && CompactF3PlusConfig.showGizmo.get()
+                        && compactHudOpenedViaF3;
+                mc.options.renderDebug = wantGizmo;
+            } else {
+                // END: restore so next frame sees the user's real F3 state.
+                mc.options.renderDebug = userF3State;
+            }
+        }
+
+        public static void onRenderGameOverlayPre(RenderGameOverlayEvent.Pre event) {
+            if (!CompactF3PlusConfig.replaceF3.get())
+                return;
+            // Cancel vanilla F3 text whenever it would draw (renderDebug was forced
+            // true this frame because we want the gizmo). The crosshair gizmo itself
+            // is drawn by GameRenderer earlier in the frame and is unaffected.
+            if (event.getType() == RenderGameOverlayEvent.ElementType.DEBUG) {
                 event.setCanceled(true);
             }
-
-            if (!CompactF3PlusConfig.showGizmo.get()
-                    && event.getOverlay().equals(VanillaGuiOverlay.CROSSHAIR.type())
-                    && Minecraft.getInstance().options.renderDebug) {
-
-                // Temporarily disable the debug overlay state before the crosshair layer
-                // renders
-                Minecraft.getInstance().options.renderDebug = false;
-                toggledForCrosshair = true;
-            }
         }
 
-        public static void onRenderGuiOverlayPost(RenderGuiOverlayEvent.Post event) {
-            if (toggledForCrosshair && event.getOverlay().equals(VanillaGuiOverlay.CROSSHAIR.type())) {
-                // Restore the debug overlay state after the crosshair layer finishes rendering
-                Minecraft.getInstance().options.renderDebug = true;
-                toggledForCrosshair = false;
+        public static void onRenderGameOverlayPost(RenderGameOverlayEvent.Post event) {
+            if (event.getType() != RenderGameOverlayEvent.ElementType.ALL) {
+                return;
             }
+            renderCompactHud(event);
         }
 
-        public static void onRenderGui(RenderGuiEvent.Post event) {
+        private static void renderCompactHud(RenderGameOverlayEvent.Post event) {
             Minecraft mc = Minecraft.getInstance();
-            if (TOGGLE_HUD.consumeClick())
+            if (TOGGLE_HUD.consumeClick()) {
                 compactHudEnabled = !compactHudEnabled;
+                compactHudOpenedViaF3 = false;
+            }
             LocalPlayer player = mc.player;
             if (player == null || mc.options.hideGui)
                 return;
-
-            boolean debugShowing = mc.options.renderDebug;
-            if (CompactF3PlusConfig.replaceF3.get()) {
-                if (debugShowing != wasDebugShowing) {
-                    compactHudEnabled = !compactHudEnabled;
-                    wasDebugShowing = debugShowing;
-                }
-
-                if (!compactHudEnabled && debugShowing) {
-                    mc.options.renderDebug = false;
-                    wasDebugShowing = false;
-                }
-
-                if (!compactHudEnabled)
-                    return;
-            } else {
-                wasDebugShowing = debugShowing;
-                if (!compactHudEnabled || debugShowing)
-                    return;
-            }
+            if (!compactHudEnabled)
+                return;
+            // When replaceF3 is off, vanilla F3 still works normally — don't stack our
+            // HUD on top of it.
+            if (!CompactF3PlusConfig.replaceF3.get() && mc.options.renderDebug)
+                return;
 
             Font font = mc.font;
             boolean useColors = CompactF3PlusConfig.colorIndicators.get();
@@ -546,7 +546,7 @@ public class CompactF3Plus {
             int bgColor = (alphaInt << 24) | 0x000000;
 
             GuiComponent.fill(
-                    event.getPoseStack(),
+                    event.getMatrixStack(),
                     drawX - padding,
                     drawY - padding,
                     drawX + maxWidth + padding,
@@ -560,9 +560,9 @@ public class CompactF3Plus {
                 for (int j = 0; j < line.currentSegmentIndex; j++) {
                     TextSegment seg = line.segments.get(j);
                     if (drawShadow) {
-                        font.drawShadow(event.getPoseStack(), seg.text, x, drawY, seg.color);
+                        font.drawShadow(event.getMatrixStack(), seg.text, x, drawY, seg.color);
                     } else {
-                        font.draw(event.getPoseStack(), seg.text, x, drawY, seg.color);
+                        font.draw(event.getMatrixStack(), seg.text, x, drawY, seg.color);
                     }
                     x += font.width(seg.text);
                 }
