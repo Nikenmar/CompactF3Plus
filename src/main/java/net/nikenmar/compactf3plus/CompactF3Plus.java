@@ -25,6 +25,15 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import org.lwjgl.glfw.GLFW;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.IntegerProperty;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.BlockHitResult;
+import net.neoforged.neoforge.client.event.sound.PlaySoundEvent;
+import net.minecraft.client.resources.sounds.SoundInstance;
+import net.minecraft.sounds.SoundSource;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -46,6 +55,7 @@ public class CompactF3Plus {
         // CameraRenderState we don't yet plumb through) — flag retained for forward
         // compatibility once we render our own gizmo.
         NeoForge.EVENT_BUS.addListener(HudRenderer::onPlayerLogin);
+        NeoForge.EVENT_BUS.addListener(HudRenderer::onSoundPlay);
     }
 
     private static final class HudRenderer {
@@ -55,6 +65,9 @@ public class CompactF3Plus {
         // without the 3D gizmo even if showGizmo is on.
         private static boolean compactHudOpenedViaF3 = false;
         private static boolean wasDebugShowing = false;
+        private static SoundInstance currentMusicInstance = null;
+        private static String currentMusicTrackName = "";
+
         // While replaceF3 is on we OWN the THREE_DIMENSIONAL_CROSSHAIR debug entry
         // unconditionally (ALWAYS_ON when our gizmo is wanted, NEVER otherwise).
         // setStatus persists to disk, so we only call it on transitions. Initial
@@ -143,6 +156,29 @@ public class CompactF3Plus {
         public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
             event.registerCategory(COMPACT_F3_CATEGORY);
             event.register(TOGGLE_HUD);
+        }
+
+        public static void onSoundPlay(PlaySoundEvent event) {
+            if (event.getSound() != null && (event.getSound().getSource() == SoundSource.MUSIC || event.getSound().getSource() == SoundSource.RECORDS)) {
+                currentMusicInstance = event.getSound();
+                currentMusicTrackName = "Unknown";
+            }
+        }
+
+        private static String formatTrackName(String rawPath) {
+            if (rawPath == null) return "Unknown";
+            String[] parts = rawPath.split("[/.]");
+            String fileName = parts[parts.length - 1];
+
+            StringBuilder sb = new StringBuilder();
+            for (String word : fileName.split("_")) {
+                if (!word.isEmpty()) {
+                    if (sb.length() > 0) sb.append(' ');
+                    sb.append(Character.toUpperCase(word.charAt(0)));
+                    if (word.length() > 1) sb.append(word.substring(1));
+                }
+            }
+            return sb.toString();
         }
 
         public static void onPlayerLogin(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
@@ -543,10 +579,82 @@ public class CompactF3Plus {
                 nextLine().addSegment("Biome: " + biome);
             }
 
-            // Dimension
             if (CompactF3PlusConfig.showDimension.get()) {
                 String dimension = player.level().dimension().identifier().toString();
                 nextLine().addSegment("Dimension: " + dimension);
+            }
+
+
+            // Music Track
+            if (CompactF3PlusConfig.showMusicTrack.get() && currentMusicInstance != null) {
+                if (mc.getSoundManager().isActive(currentMusicInstance)) {
+                    // Try to refine name from resolved sound if currently unknown or just event ID
+                    try {
+                        if (currentMusicInstance.getSound() != null && currentMusicInstance.getSound().getLocation() != null) {
+                            String actualPath = currentMusicInstance.getSound().getLocation().getPath();
+                            // If the actual path is different/more specific than what we have, update it
+                            String refined = formatTrackName(actualPath);
+                            if (!refined.equals("Unknown")) {
+                                currentMusicTrackName = refined;
+                            }
+                        } else if (currentMusicTrackName.equals("Unknown")) {
+                            currentMusicTrackName = formatTrackName(currentMusicInstance.getIdentifier().getPath());
+                        }
+                    } catch (Exception e) {}
+
+                    nextLine().addSegment("Music: " + currentMusicTrackName);
+                } else {
+                    currentMusicInstance = null;
+                    currentMusicTrackName = "";
+                }
+            }
+
+            // Durability
+            if (CompactF3PlusConfig.showDurability.get()) {
+                String durLine = "";
+                ItemStack mainHand = player.getMainHandItem();
+                if (mainHand.isDamageableItem() && mainHand.isDamaged()) {
+                    durLine += (mainHand.getMaxDamage() - mainHand.getDamageValue()) + "/" + mainHand.getMaxDamage();
+                }
+                ItemStack offHand = player.getOffhandItem();
+                if (offHand.isDamageableItem() && offHand.isDamaged()) {
+                    if (!durLine.isEmpty()) durLine += " | ";
+                    durLine += (offHand.getMaxDamage() - offHand.getDamageValue()) + "/" + offHand.getMaxDamage();
+                }
+                boolean hasArmor = false;
+                net.minecraft.world.entity.EquipmentSlot[] slots = new net.minecraft.world.entity.EquipmentSlot[]{
+                    net.minecraft.world.entity.EquipmentSlot.HEAD,
+                    net.minecraft.world.entity.EquipmentSlot.CHEST,
+                    net.minecraft.world.entity.EquipmentSlot.LEGS,
+                    net.minecraft.world.entity.EquipmentSlot.FEET
+                };
+                for (net.minecraft.world.entity.EquipmentSlot slot : slots) {
+                    ItemStack armor = player.getItemBySlot(slot);
+                    if (armor != null && armor.isDamageableItem() && armor.isDamaged()) {
+                        hasArmor = true;
+                        break;
+                    }
+                }
+                if (hasArmor) {
+                    if (!durLine.isEmpty()) durLine += " | ";
+                    durLine += "Armor Damaged";
+                }
+                if (!durLine.isEmpty()) {
+                    nextLine().addSegment("Durability: " + durLine);
+                }
+            }
+
+            // Crop Growth
+            if (CompactF3PlusConfig.showCropGrowth.get() && mc.hitResult != null && mc.hitResult.getType() == HitResult.Type.BLOCK) {
+                BlockPos targetPos = ((BlockHitResult) mc.hitResult).getBlockPos();
+                BlockState state = player.level().getBlockState(targetPos);
+                Property<?> ageProp = state.getProperties().stream().filter(p -> p.getName().equals("age")).findFirst().orElse(null);
+                if (ageProp instanceof IntegerProperty intProp) {
+                    int age = state.getValue(intProp);
+                    int maxAge = intProp.getPossibleValues().stream().max(Integer::compareTo).orElse(age);
+                    int percent = (int) (((float) age / maxAge) * 100);
+                    nextLine().addSegment("Crop Age: " + age + "/" + maxAge + " (" + percent + "%)");
+                }
             }
 
             if (currentLineIndex == 0)

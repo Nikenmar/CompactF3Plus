@@ -24,6 +24,9 @@ public final class CompactF3PlusConfig {
         public static final ModConfigSpec.BooleanValue showLight;
         public static final ModConfigSpec.BooleanValue showBiome;
         public static final ModConfigSpec.BooleanValue showDimension;
+        public static final ModConfigSpec.BooleanValue showDurability;
+        public static final ModConfigSpec.BooleanValue showCropGrowth;
+        public static final ModConfigSpec.BooleanValue showMusicTrack;
         public static final ModConfigSpec.BooleanValue colorIndicators;
         public static final ModConfigSpec.BooleanValue textShadow;
         public static final ModConfigSpec.BooleanValue replaceF3;
@@ -55,6 +58,9 @@ public final class CompactF3PlusConfig {
                 showLight = builder.comment("Show light level line").define("showLight", true);
                 showBiome = builder.comment("Show biome line").define("showBiome", true);
                 showDimension = builder.comment("Show dimension line").define("showDimension", false);
+                showDurability = builder.comment("Show equipped items durability").define("showDurability", false);
+                showCropGrowth = builder.comment("Show crop growth age when looking at it").define("showCropGrowth", false);
+                showMusicTrack = builder.comment("Show currently playing music track").define("showMusicTrack", false);
 
                 builder.pop();
 
@@ -112,6 +118,9 @@ public final class CompactF3PlusConfig {
                 showLight.set(true);
                 showBiome.set(true);
                 showDimension.set(false);
+                showDurability.set(false);
+                showCropGrowth.set(false);
+                showMusicTrack.set(false);
 
                 colorIndicators.set(false);
                 textShadow.set(false);
