@@ -4,8 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.fabricmc.loader.api.FabricLoader;
-
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -14,7 +12,7 @@ import java.nio.file.Path;
 
 public final class CompactF3PlusConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("compactf3plus.json");
+    private static final Path CONFIG_PATH = Path.of("config/compactf3plus.json");
 
     public static boolean showFps = true;
     public static boolean showSystem = true;
@@ -35,6 +33,9 @@ public final class CompactF3PlusConfig {
     public static boolean showLight = true;
     public static boolean showBiome = true;
     public static boolean showDimension = false;
+    public static boolean showDurability = false;
+    public static boolean showCropGrowth = false;
+    public static boolean showMusicTrack = false;
 
     public static boolean colorIndicators = false;
     public static boolean textShadow = false;
@@ -78,6 +79,9 @@ public final class CompactF3PlusConfig {
             showLight = getBoolean(root, "showLight", showLight);
             showBiome = getBoolean(root, "showBiome", showBiome);
             showDimension = getBoolean(root, "showDimension", showDimension);
+            showDurability = getBoolean(root, "showDurability", showDurability);
+            showCropGrowth = getBoolean(root, "showCropGrowth", showCropGrowth);
+            showMusicTrack = getBoolean(root, "showMusicTrack", showMusicTrack);
 
             colorIndicators = getBoolean(root, "colorIndicators", colorIndicators);
             textShadow = getBoolean(root, "textShadow", textShadow);
@@ -111,6 +115,9 @@ public final class CompactF3PlusConfig {
         root.addProperty("showLight", showLight);
         root.addProperty("showBiome", showBiome);
         root.addProperty("showDimension", showDimension);
+        root.addProperty("showDurability", showDurability);
+        root.addProperty("showCropGrowth", showCropGrowth);
+        root.addProperty("showMusicTrack", showMusicTrack);
 
         root.addProperty("colorIndicators", colorIndicators);
         root.addProperty("textShadow", textShadow);
@@ -148,6 +155,9 @@ public final class CompactF3PlusConfig {
         showLight = true;
         showBiome = true;
         showDimension = false;
+        showDurability = false;
+        showCropGrowth = false;
+        showMusicTrack = false;
 
         colorIndicators = false;
         textShadow = false;

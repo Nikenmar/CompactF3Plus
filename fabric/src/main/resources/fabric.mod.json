@@ -12,12 +12,15 @@
   "environment": "client",
   "entrypoints": {
     "client": [
-      "net.nikenmar.compactf3plus.CompactF3Plus"
+      "net.nikenmar.compactf3plus.CompactF3PlusFabric"
     ],
     "modmenu": [
       "net.nikenmar.compactf3plus.CompactF3PlusModMenu"
     ]
   },
+  "mixins": [
+    "compactf3plus.mixins.json"
+  ],
   "depends": {
     "fabricloader": "${loader_version_range}",
     "minecraft": "${minecraft_version_range}",

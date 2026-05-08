@@ -1,84 +1,30 @@
 plugins {
-    // 'net.fabricmc.fabric-loom' is the post-obfuscation plugin ID — handles 26.1+
-    // unobfuscated artifacts directly. The legacy 'fabric-loom' ID expects Mojang
-    // proguard mapping files which Mojang stopped publishing in 26.1.
-    // 1.16-SNAPSHOT is what fabric-example-mod ships for 26.1.2.
-    id 'net.fabricmc.fabric-loom' version '1.16-SNAPSHOT'
-    id 'maven-publish'
+    id 'net.fabricmc.fabric-loom' version '1.16-SNAPSHOT' apply false
+    id 'net.neoforged.moddev' version '2.0.141' apply false
 }
 
-version = mod_version
-group = mod_group_id
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'maven-publish'
 
-base {
-    archivesName = mod_id
-}
+    version = mod_version
+    group = mod_group_id
 
-def releaseJarName = "${mod_id}-${mod_version}-fabric-26.1.x.jar"
-def releaseSourcesJarName = "${mod_id}-${mod_version}-fabric-26.1.x-sources.jar"
-
-repositories {
-    mavenCentral()
-    maven { url = 'https://maven.fabricmc.net/' }
-    maven { url = 'https://maven.terraformersmc.com/releases/' }
-    maven { url = 'https://maven.shedaniel.me/' }
-}
-
-dependencies {
-    minecraft "com.mojang:minecraft:${minecraft_version}"
-    // No `mappings` declaration: Mojang ships unobfuscated jars in 26.1+.
-    // The 'net.fabricmc.fabric-loom' plugin handles this case natively.
-    implementation "net.fabricmc:fabric-loader:${loader_version}"
-    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
-    implementation "com.terraformersmc:modmenu:${modmenu_version}"
-    // Cloth-config dropped: config is stored as plain JSON (see CompactF3PlusConfig).
-}
-
-processResources {
-    inputs.property "version", project.version
-    filesMatching("fabric.mod.json") {
-        expand(
-                "version": project.version,
-                "mod_id": project.mod_id,
-                "mod_name": project.mod_name,
-                "mod_description": project.mod_description,
-                "mod_authors": project.mod_authors,
-                "mod_license": project.mod_license,
-                "minecraft_version_range": project.minecraft_version_range,
-                "loader_version_range": project.loader_version_range
-        )
+    java {
+        toolchain.languageVersion = JavaLanguageVersion.of(25)
+        withSourcesJar()
     }
-}
 
-java {
-    // 26.1 ships on Java 25 (matches the neoforge branch).
-    toolchain.languageVersion = JavaLanguageVersion.of(25)
-    withSourcesJar()
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-    options.release = 25
-}
-
-// No remapJar/remapSourcesJar in unobfuscated 26.1+ pipeline — vanilla jars are
-// already named, nothing to remap. Just rename the regular jar output.
-tasks.named('jar', Jar).configure {
-    archiveFileName = releaseJarName
-}
-tasks.named('sourcesJar', Jar).configure {
-    archiveFileName = releaseSourcesJarName
-}
-
-publishing {
-    publications {
-        create("mavenJava", MavenPublication) {
-            from components.java
-        }
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = 25
     }
+
     repositories {
-        maven {
-            url = uri("${project.projectDir}/repo")
-        }
+        mavenCentral()
+        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://maven.neoforged.net/releases' }
+        maven { url = 'https://maven.terraformersmc.com/releases/' }
+        maven { url = 'https://maven.shedaniel.me/' }
     }
 }

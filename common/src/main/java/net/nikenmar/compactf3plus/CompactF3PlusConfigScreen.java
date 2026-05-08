@@ -67,6 +67,9 @@ public class CompactF3PlusConfigScreen extends Screen {
         entries.add(toggle("Show Light",          () -> CompactF3PlusConfig.showLight,          v -> CompactF3PlusConfig.showLight = v));
         entries.add(toggle("Show Biome",          () -> CompactF3PlusConfig.showBiome,          v -> CompactF3PlusConfig.showBiome = v));
         entries.add(toggle("Show Dimension",      () -> CompactF3PlusConfig.showDimension,      v -> CompactF3PlusConfig.showDimension = v));
+        entries.add(toggle("Show Durability",     () -> CompactF3PlusConfig.showDurability,     v -> CompactF3PlusConfig.showDurability = v));
+        entries.add(toggle("Show Crop Growth",    () -> CompactF3PlusConfig.showCropGrowth,     v -> CompactF3PlusConfig.showCropGrowth = v));
+        entries.add(toggle("Show Music Track",    () -> CompactF3PlusConfig.showMusicTrack,     v -> CompactF3PlusConfig.showMusicTrack = v));
         entries.add(new HeaderEntry("Other"));
         entries.add(toggle("Replace Default F3",          () -> CompactF3PlusConfig.replaceF3,         v -> CompactF3PlusConfig.replaceF3 = v));
         entries.add(toggle("Show Gizmo (if Replace F3)",  () -> CompactF3PlusConfig.showGizmo,         v -> CompactF3PlusConfig.showGizmo = v));

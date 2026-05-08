@@ -1,10 +1,6 @@
 package net.nikenmar.compactf3plus;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -23,20 +19,14 @@ import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.phys.Vec3;
 import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.resources.sounds.SoundInstance;
+import net.minecraft.sounds.SoundSource;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
-public final class CompactF3Plus implements ClientModInitializer {
-    @Override
-    public void onInitializeClient() {
-        CompactF3PlusConfig.load();
-        HudRenderer.initialize();
-    }
-
-
-    static final class HudRenderer {
+public final class CompactHudRenderer {
         private static boolean compactHudEnabled = false;
         // True when the active HUD session was opened by pressing F3 (replaceF3 mode).
         // F8 and enabledByDefault do not set this — they open the HUD in "plain" mode
@@ -62,21 +52,21 @@ public final class CompactF3Plus implements ClientModInitializer {
         private static long lastFrameTimeNano = System.nanoTime();
 
         private static final long sessionStartTime = System.currentTimeMillis();
-        // Fabric has no event for category registration — we use the deprecated
-        // KeyMapping.Category.register(Identifier) since it's still the only way to
-        // add the category to the SORT_ORDER list that vanilla iterates.
-        @SuppressWarnings("deprecation")
-        private static final KeyMapping.Category COMPACT_F3_CATEGORY =
+        public static final KeyMapping.Category COMPACT_F3_CATEGORY =
                 KeyMapping.Category.register(Identifier.fromNamespaceAndPath("compactf3plus", "main"));
-        private static final KeyMapping TOGGLE_HUD = new KeyMapping(
+        public static final KeyMapping TOGGLE_HUD = new KeyMapping(
                 "key.compactf3plus.toggleHud",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_F8,
                 COMPACT_F3_CATEGORY);
 
         // Reusable Object Pools
+        private static final List<HudLine> segments = new ArrayList<>(); // Legacy name mismatch in some edits, keeping 'lines' for logic
         private static final List<HudLine> lines = new ArrayList<>();
         private static int currentLineIndex = 0;
+
+        private static SoundInstance currentMusicInstance = null;
+        private static String currentMusicTrackName = "";
 
         private static class TextSegment {
             String text;
@@ -115,6 +105,29 @@ public final class CompactF3Plus implements ClientModInitializer {
             }
         }
 
+        private static String formatTrackName(String rawPath) {
+            if (rawPath == null) return "Unknown";
+            String[] parts = rawPath.split("[/.]");
+            String fileName = parts[parts.length - 1];
+
+            StringBuilder sb = new StringBuilder();
+            for (String word : fileName.split("_")) {
+                if (!word.isEmpty()) {
+                    if (sb.length() > 0) sb.append(' ');
+                    sb.append(Character.toUpperCase(word.charAt(0)));
+                    if (word.length() > 1) sb.append(word.substring(1));
+                }
+            }
+            return sb.toString();
+        }
+
+        public static void onSoundPlay(SoundInstance sound) {
+            if (sound != null && (sound.getSource() == SoundSource.MUSIC || sound.getSource() == SoundSource.RECORDS)) {
+                currentMusicInstance = sound;
+                currentMusicTrackName = "Unknown";
+            }
+        }
+
         private static HudLine nextLine() {
             if (currentLineIndex < lines.size()) {
                 HudLine line = lines.get(currentLineIndex);
@@ -128,30 +141,13 @@ public final class CompactF3Plus implements ClientModInitializer {
             return line;
         }
 
-        static void initialize() {
-            KeyMappingHelper.registerKeyMapping(TOGGLE_HUD);
-
-            ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-                compactHudEnabled = CompactF3PlusConfig.enabledByDefault;
-                compactHudOpenedViaF3 = false;
-                wasDebugShowing = false;
-            });
-
-            // 26.1+ replaced HudRenderCallback with HudElement / HudElementRegistry.
-            // addFirst inserts BEFORE any vanilla element — ideal for our state machine
-            // that needs to run before vanilla picks up the F3 toggle this frame.
-            // addLast inserts AFTER everything else — where we draw our overlay.
-            HudElementRegistry.addFirst(
-                    Identifier.fromNamespaceAndPath("compactf3plus", "state_machine"),
-                    (graphics, delta) -> onPreHudExtract());
-            HudElementRegistry.addLast(
-                    Identifier.fromNamespaceAndPath("compactf3plus", "overlay"),
-                    HudRenderer::onRenderHud);
+        public static void onPlayerJoin() {
+            compactHudEnabled = CompactF3PlusConfig.enabledByDefault;
+            compactHudOpenedViaF3 = false;
+            wasDebugShowing = false;
         }
 
-        // State machine runs before any vanilla HUD element draws this frame.
-        // Mirror of the NeoForge branch's RenderGuiEvent.Pre listener.
-        static void onPreHudExtract() {
+        public static void onPreHudExtract() {
             Minecraft mc = Minecraft.getInstance();
             if (CompactF3PlusConfig.replaceF3) {
                 boolean debugShowing = mc.debugEntries.isOverlayVisible();
@@ -185,7 +181,7 @@ public final class CompactF3Plus implements ClientModInitializer {
             }
         }
 
-        private static void onRenderHud(GuiGraphicsExtractor guiGraphics, DeltaTracker delta) {
+        public static void onRenderHud(GuiGraphicsExtractor guiGraphics, DeltaTracker delta) {
             Minecraft mc = Minecraft.getInstance();
             while (TOGGLE_HUD.consumeClick()) {
                 compactHudEnabled = !compactHudEnabled;
@@ -535,6 +531,57 @@ public final class CompactF3Plus implements ClientModInitializer {
                 nextLine().addSegment("Dimension: " + dimension);
             }
 
+            // Music Track
+            if (CompactF3PlusConfig.showMusicTrack && currentMusicInstance != null) {
+                if (mc.getSoundManager().isActive(currentMusicInstance)) {
+                    try {
+                        if (currentMusicInstance.getSound() != null && currentMusicInstance.getSound().getLocation() != null) {
+                            String actualPath = currentMusicInstance.getSound().getLocation().getPath();
+                            String refined = formatTrackName(actualPath);
+                            if (!refined.equals("Unknown")) {
+                                currentMusicTrackName = refined;
+                            }
+                        } else if (currentMusicTrackName.equals("Unknown")) {
+                            currentMusicTrackName = formatTrackName(currentMusicInstance.getIdentifier().getPath());
+                        }
+                    } catch (Exception e) {}
+                    nextLine().addSegment("Music: " + currentMusicTrackName);
+                } else {
+                    currentMusicInstance = null;
+                    currentMusicTrackName = "";
+                }
+            }
+
+            // Durability
+            if (CompactF3PlusConfig.showDurability) {
+                String durLine = "";
+                net.minecraft.world.item.ItemStack mainHand = player.getMainHandItem();
+                if (mainHand.isDamageableItem() && mainHand.isDamaged()) {
+                    durLine += (mainHand.getMaxDamage() - mainHand.getDamageValue()) + "/" + mainHand.getMaxDamage();
+                }
+                net.minecraft.world.item.ItemStack offHand = player.getOffhandItem();
+                if (offHand.isDamageableItem() && offHand.isDamaged()) {
+                    if (!durLine.isEmpty()) durLine += " | ";
+                    durLine += (offHand.getMaxDamage() - offHand.getDamageValue()) + "/" + offHand.getMaxDamage();
+                }
+                if (!durLine.isEmpty()) {
+                    nextLine().addSegment("Durability: " + durLine);
+                }
+            }
+
+            // Crop Growth
+            if (CompactF3PlusConfig.showCropGrowth && mc.hitResult != null && mc.hitResult.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                BlockPos targetPos = ((net.minecraft.world.phys.BlockHitResult) mc.hitResult).getBlockPos();
+                net.minecraft.world.level.block.state.BlockState state = player.level().getBlockState(targetPos);
+                net.minecraft.world.level.block.state.properties.Property<?> ageProp = state.getProperties().stream().filter(p -> p.getName().equals("age")).findFirst().orElse(null);
+                if (ageProp instanceof net.minecraft.world.level.block.state.properties.IntegerProperty intProp) {
+                    int age = state.getValue(intProp);
+                    int maxAge = intProp.getPossibleValues().stream().max(Integer::compareTo).orElse(age);
+                    int percent = (int) (((float) age / maxAge) * 100);
+                    nextLine().addSegment("Crop Age: " + age + "/" + maxAge + " (" + percent + "%)");
+                }
+            }
+
             if (currentLineIndex == 0)
                 return;
 
@@ -578,5 +625,4 @@ public final class CompactF3Plus implements ClientModInitializer {
                 drawY += lineHeight;
             }
         }
-    }
 }
