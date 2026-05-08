@@ -1,128 +1,91 @@
 package net.nikenmar.compactf3plus;
 
-import net.minecraftforge.common.ForgeConfigSpec;
+import net.minecraftforge.common.config.Configuration;
+import net.minecraftforge.common.config.Property;
+import net.minecraftforge.fml.common.Loader;
 
-public final class CompactF3PlusConfig {
-        public static final ForgeConfigSpec SPEC;
+import java.io.File;
 
-        public static final ForgeConfigSpec.BooleanValue showFps;
-        public static final ForgeConfigSpec.BooleanValue showSystem;
-        public static final ForgeConfigSpec.BooleanValue showLag;
-        public static final ForgeConfigSpec.BooleanValue showTps;
-        public static final ForgeConfigSpec.BooleanValue showCoords;
-        public static final ForgeConfigSpec.BooleanValue showSubchunk;
-        public static final ForgeConfigSpec.BooleanValue showLocalDifficulty;
-        public static final ForgeConfigSpec.BooleanValue showEntities;
-        public static final ForgeConfigSpec.BooleanValue showSession;
-        public static final ForgeConfigSpec.BooleanValue showPing;
-        public static final ForgeConfigSpec.BooleanValue showSpeed;
-        public static final ForgeConfigSpec.BooleanValue detailedSpeed;
-        public static final ForgeConfigSpec.BooleanValue showFacing;
-        public static final ForgeConfigSpec.BooleanValue showPitch;
-        public static final ForgeConfigSpec.BooleanValue showTime;
-        public static final ForgeConfigSpec.BooleanValue showDay;
-        public static final ForgeConfigSpec.BooleanValue showLight;
-        public static final ForgeConfigSpec.BooleanValue showBiome;
-        public static final ForgeConfigSpec.BooleanValue showDimension;
-        public static final ForgeConfigSpec.BooleanValue colorIndicators;
-        public static final ForgeConfigSpec.BooleanValue textShadow;
-        public static final ForgeConfigSpec.BooleanValue replaceF3;
-        public static final ForgeConfigSpec.BooleanValue showGizmo;
-        public static final ForgeConfigSpec.BooleanValue enabledByDefault;
-        public static final ForgeConfigSpec.IntValue backgroundOpacity;
+public class CompactF3PlusConfig {
+    public static Configuration config;
 
-        static {
-                ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
+    public static boolean showFps = true;
+    public static boolean showSystem = true;
+    public static boolean showLag = true;
+    public static boolean showTps = false;
+    public static boolean showCoords = true;
+    public static boolean showSubchunk = false;
+    public static boolean showLocalDifficulty = false;
+    public static boolean showEntities = false;
+    public static boolean showSession = true;
+    public static boolean showPing = true;
+    public static boolean showSpeed = true;
+    public static boolean detailedSpeed = false;
+    public static boolean showFacing = true;
+    public static boolean showPitch = false;
+    public static boolean showTime = true;
+    public static boolean showDay = true;
+    public static boolean showLight = true;
+    public static boolean showBiome = true;
+    public static boolean showDimension = false;
 
-                builder.comment("HUD Section Toggles").push("sections");
+    public static boolean colorIndicators = false;
+    public static boolean textShadow = false;
+    public static boolean replaceF3 = true;
+    public static boolean showGizmo = false;
+    public static boolean enabledByDefault = false;
+    public static int backgroundOpacity = 25;
 
-                showFps = builder.comment("Show FPS line").define("showFps", true);
-                showSystem = builder.comment("Show RAM line").define("showSystem", true);
-                showLag = builder.comment("Show Lag (Stutters) line").define("showLag", true);
-                showTps = builder.comment("Show TPS line").define("showTps", false);
-                showCoords = builder.comment("Show XYZ coordinates line").define("showCoords", true);
-                showSubchunk = builder.comment("Show chunk/slime info line").define("showSubchunk", false);
-                showLocalDifficulty = builder.comment("Show local difficulty line").define("showLocalDifficulty",
-                                false);
-                showEntities = builder.comment("Show entities count line").define("showEntities", false);
-                showSession = builder.comment("Show session time line").define("showSession", true);
-                showPing = builder.comment("Show ping line").define("showPing", true);
-                showSpeed = builder.comment("Show speed section").define("showSpeed", true);
-                showFacing = builder.comment("Show facing direction line").define("showFacing", true);
-                showPitch = builder.comment("Show head pitch (vertical angle) line").define("showPitch", false);
-                showTime = builder.comment("Show in-game time line").define("showTime", true);
-                showDay = builder.comment("Show in-game day line").define("showDay", true);
-                showLight = builder.comment("Show light level line").define("showLight", true);
-                showBiome = builder.comment("Show biome line").define("showBiome", true);
-                showDimension = builder.comment("Show dimension line").define("showDimension", false);
-
-                builder.pop();
-
-                builder.comment("Visual Settings").push("visuals");
-
-                colorIndicators = builder
-                                .comment("Color-code FPS and TPS values (green/yellow/red)")
-                                .define("colorIndicators", false);
-
-                textShadow = builder
-                                .comment("Render text with shadow")
-                                .define("textShadow", false);
-
-                detailedSpeed = builder
-                                .comment("Show detailed speed information")
-                                .define("detailedSpeed", false);
-
-                replaceF3 = builder
-                                .comment("Replace the default F3 debug screen with the Compact F3 Plus overlay")
-                                .define("replaceF3", true);
-
-                showGizmo = builder
-                                .comment("Show the XYZ axis gizmo when F3 is replaced (only works when replaceF3 is true)")
-                                .define("showGizmo", false);
-
-                enabledByDefault = builder
-                                .comment("Enable the Compact HUD by default when joining a world")
-                                .define("enabledByDefault", false);
-
-                backgroundOpacity = builder
-                                .comment("Background opacity percentage (0-100)")
-                                .defineInRange("backgroundOpacity", 25, 0, 100);
-
-                builder.pop();
-
-                SPEC = builder.build();
+    public static void init() {
+        if (config == null) {
+            config = new Configuration(new File(Loader.instance().getConfigDir(), "compactf3plus.cfg"));
+            config.load();
         }
+        syncConfig();
+    }
 
-        public static void resetToDefaults() {
-                showFps.set(true);
-                showSystem.set(true);
-                showLag.set(true);
-                showTps.set(false);
-                showCoords.set(true);
-                showSubchunk.set(false);
-                showLocalDifficulty.set(false);
-                showEntities.set(false);
-                showSession.set(true);
-                showPing.set(true);
-                showSpeed.set(true);
-                showFacing.set(true);
-                showPitch.set(false);
-                showTime.set(true);
-                showDay.set(true);
-                showLight.set(true);
-                showBiome.set(true);
-                showDimension.set(false);
+    public static void syncConfig() {
+        try {
 
-                colorIndicators.set(false);
-                textShadow.set(false);
-                detailedSpeed.set(false);
-                replaceF3.set(true);
-                showGizmo.set(false);
-                enabledByDefault.set(false);
-                backgroundOpacity.set(25);
-                SPEC.save();
+            String cSections = "HUD Sections";
+            config.setCategoryComment(cSections, "Toggle which lines and sections are visible on the HUD.");
+
+            showFps = config.getBoolean("Show FPS", cSections, true, "Show FPS line");
+            showSystem = config.getBoolean("Show RAM", cSections, true, "Show RAM line");
+            showLag = config.getBoolean("Show Lag", cSections, true, "Show Lag (Stutters) line");
+            showTps = config.getBoolean("Show TPS", cSections, false, "Show TPS line");
+            showCoords = config.getBoolean("Show Coordinates", cSections, true, "Show XYZ coordinates line");
+            showSubchunk = config.getBoolean("Show Chunk/Slime", cSections, false, "Show chunk/slime info line");
+            showLocalDifficulty = config.getBoolean("Show Local Difficulty", cSections, false, "Show local difficulty line");
+            showEntities = config.getBoolean("Show Entities Count", cSections, false, "Show entities count line");
+            showSession = config.getBoolean("Show Session", cSections, true, "Show session time line");
+            showPing = config.getBoolean("Show Ping", cSections, true, "Show ping line");
+            showSpeed = config.getBoolean("Show Speed", cSections, true, "Show speed section");
+            detailedSpeed = config.getBoolean("Detailed Speed", cSections, false, "Show detailed speed information");
+            showFacing = config.getBoolean("Show Facing", cSections, true, "Show facing direction line");
+            showPitch = config.getBoolean("Show Pitch", cSections, false, "Show head pitch (vertical angle) line");
+            showTime = config.getBoolean("Show Time", cSections, true, "Show in-game time line");
+            showDay = config.getBoolean("Show Day", cSections, true, "Show in-game day line");
+            showLight = config.getBoolean("Show Light", cSections, true, "Show light level line");
+            showBiome = config.getBoolean("Show Biome", cSections, true, "Show biome line");
+            showDimension = config.getBoolean("Show Dimension", cSections, false, "Show dimension line");
+
+            String cVisuals = "Visuals";
+            config.setCategoryComment(cVisuals, "Visual settings for the HUD.");
+
+            colorIndicators = config.getBoolean("Color Indicators", cVisuals, false, "Color-code FPS and TPS values");
+            textShadow = config.getBoolean("Text Shadow", cVisuals, false, "Render text with shadow");
+            replaceF3 = config.getBoolean("Replace Default F3", cVisuals, true, "Replace the default F3 debug screen");
+            showGizmo = config.getBoolean("Show Gizmo", cVisuals, false, "Show the XYZ axis gizmo when F3 is replaced");
+            enabledByDefault = config.getBoolean("Enabled by Default", cVisuals, false, "Enable HUD by default");
+            backgroundOpacity = config.getInt("Background Opacity", cVisuals, 25, 0, 100, "Background opacity percentage (0-100)");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (config.hasChanged()) {
+                config.save();
+            }
         }
-
-        private CompactF3PlusConfig() {
-        }
+    }
 }

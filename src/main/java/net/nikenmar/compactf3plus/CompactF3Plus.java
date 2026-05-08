@@ -1,69 +1,71 @@
 package net.nikenmar.compactf3plus;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.player.ClientPlayerEntity;
-import net.minecraft.client.gui.AbstractGui;
+import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.network.play.NetworkPlayerInfo;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.client.settings.KeyBinding;
-import net.minecraft.util.RegistryKey;
-import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.world.LightType;
-import net.minecraft.world.World;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.biome.Biome;
-import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.ExtensionPoint;
-import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import org.lwjgl.glfw.GLFW;
+import net.minecraftforge.fml.common.event.FMLInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.InputEvent;
+import net.minecraftforge.fml.common.gameevent.PlayerEvent;
+import net.minecraftforge.fml.common.network.FMLNetworkEvent;
+import org.lwjgl.input.Keyboard;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
-@Mod("compactf3plus")
+@Mod(modid = "compactf3plus", version = "1.1.2", name = "Compact F3 Plus", guiFactory = "net.nikenmar.compactf3plus.GuiFactory")
 public class CompactF3Plus {
     private static final KeyBinding TOGGLE_HUD = new KeyBinding(
             "key.compactf3plus.toggleHud",
-            GLFW.GLFW_KEY_F8,
+            Keyboard.KEY_F8,
             "key.categories.compactf3plus");
 
-    public CompactF3Plus() {
-        IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
-
-        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, CompactF3PlusConfig.SPEC);
-        ModLoadingContext.get().registerExtensionPoint(
-                ExtensionPoint.CONFIGGUIFACTORY,
-                () -> (minecraft, screen) -> new CompactF3PlusConfigScreen(screen));
-
-        modBus.addListener(CompactF3Plus::onClientSetup);
-
-        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderOverlayPre);
-        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onRenderOverlayPost);
-        MinecraftForge.EVENT_BUS.addListener(HudRenderer::onPlayerLogin);
+    @Mod.EventHandler
+    public void preInit(FMLPreInitializationEvent event) {
+        CompactF3PlusConfig.init();
+        MinecraftForge.EVENT_BUS.register(this);
+        MinecraftForge.EVENT_BUS.register(HudRenderer.class);
     }
 
-    private static void onClientSetup(final FMLClientSetupEvent event) {
+    @Mod.EventHandler
+    public void init(FMLInitializationEvent event) {
         ClientRegistry.registerKeyBinding(TOGGLE_HUD);
     }
 
+    @SubscribeEvent
+    public void onConfigChanged(net.minecraftforge.fml.client.event.ConfigChangedEvent.OnConfigChangedEvent event) {
+        if (event.getModID().equals("compactf3plus")) {
+            CompactF3PlusConfig.syncConfig();
+        }
+    }
+
+    @SubscribeEvent
+    public void onKeyInput(InputEvent.KeyInputEvent event) {
+        if (TOGGLE_HUD.isPressed()) {
+            HudRenderer.compactHudEnabled = !HudRenderer.compactHudEnabled;
+        }
+    }
+
     private static final class HudRenderer {
-        private static boolean compactHudEnabled = false;
+        public static boolean compactHudEnabled = false;
         private static boolean wasDebugShowing = false;
         private static boolean toggledForCrosshair = false;
 
         private static final int AVG_FPS_SECONDS = 60;
-        private static final LinkedList<Integer> fpsHistory = new LinkedList<Integer>();
+        private static final LinkedList<Integer> fpsHistory = new LinkedList<>();
         private static long lastFpsSampleTime = 0;
 
         private static final int STUTTER_HISTORY_SIZE = 600;
@@ -74,23 +76,25 @@ public class CompactF3Plus {
 
         private static long sessionStartTime = System.currentTimeMillis();
 
-        private static final List<HudLine> lines = new ArrayList<HudLine>();
+        private static final List<HudLine> lines = new ArrayList<>();
         private static int currentLineIndex = 0;
 
-        public static void onPlayerLogin(ClientPlayerNetworkEvent.LoggedInEvent event) {
-            compactHudEnabled = CompactF3PlusConfig.enabledByDefault.get();
+        @SubscribeEvent
+        public static void onClientConnected(FMLNetworkEvent.ClientConnectedToServerEvent event) {
+            compactHudEnabled = CompactF3PlusConfig.enabledByDefault;
             wasDebugShowing = false;
             sessionStartTime = System.currentTimeMillis();
         }
 
+        @SubscribeEvent
         public static void onRenderOverlayPre(RenderGameOverlayEvent.Pre event) {
-            Minecraft mc = Minecraft.getInstance();
-            ClientPlayerEntity player = mc.player;
+            Minecraft mc = Minecraft.getMinecraft();
+            EntityPlayerSP player = mc.player;
             if (player == null || mc.gameSettings.hideGUI) {
                 return;
             }
 
-            if (!CompactF3PlusConfig.replaceF3.get()) {
+            if (!CompactF3PlusConfig.replaceF3) {
                 return;
             }
 
@@ -99,7 +103,7 @@ public class CompactF3Plus {
                 return;
             }
 
-            if (!CompactF3PlusConfig.showGizmo.get()
+            if (!CompactF3PlusConfig.showGizmo
                     && event.getType() == RenderGameOverlayEvent.ElementType.CROSSHAIRS
                     && mc.gameSettings.showDebugInfo) {
                 mc.gameSettings.showDebugInfo = false;
@@ -107,8 +111,9 @@ public class CompactF3Plus {
             }
         }
 
+        @SubscribeEvent
         public static void onRenderOverlayPost(RenderGameOverlayEvent.Post event) {
-            Minecraft mc = Minecraft.getInstance();
+            Minecraft mc = Minecraft.getMinecraft();
 
             if (toggledForCrosshair && event.getType() == RenderGameOverlayEvent.ElementType.CROSSHAIRS) {
                 mc.gameSettings.showDebugInfo = true;
@@ -119,17 +124,13 @@ public class CompactF3Plus {
                 return;
             }
 
-            if (TOGGLE_HUD.isPressed()) {
-                compactHudEnabled = !compactHudEnabled;
-            }
-
-            ClientPlayerEntity player = mc.player;
+            EntityPlayerSP player = mc.player;
             if (player == null || mc.gameSettings.hideGUI) {
                 return;
             }
 
             boolean debugShowing = mc.gameSettings.showDebugInfo;
-            if (CompactF3PlusConfig.replaceF3.get()) {
+            if (CompactF3PlusConfig.replaceF3) {
                 if (debugShowing != wasDebugShowing) {
                     compactHudEnabled = !compactHudEnabled;
                     wasDebugShowing = debugShowing;
@@ -151,13 +152,13 @@ public class CompactF3Plus {
             }
 
             FontRenderer font = mc.fontRenderer;
-            boolean useColors = CompactF3PlusConfig.colorIndicators.get();
+            boolean useColors = CompactF3PlusConfig.colorIndicators;
             currentLineIndex = 0;
 
-            int fps = getCurrentFps(mc);
+            int fps = Minecraft.getDebugFPS();
             long nowMillis = System.currentTimeMillis();
             if (nowMillis - lastFpsSampleTime >= 1000) {
-                fpsHistory.add(Integer.valueOf(fps));
+                fpsHistory.add(fps);
                 if (fpsHistory.size() > AVG_FPS_SECONDS) {
                     fpsHistory.removeFirst();
                 }
@@ -166,7 +167,7 @@ public class CompactF3Plus {
 
             int avgFps = 0;
             for (int i = 0; i < fpsHistory.size(); i++) {
-                avgFps += fpsHistory.get(i).intValue();
+                avgFps += fpsHistory.get(i);
             }
             avgFps = fpsHistory.isEmpty() ? fps : avgFps / fpsHistory.size();
 
@@ -181,7 +182,7 @@ public class CompactF3Plus {
                 }
             }
 
-            if (CompactF3PlusConfig.showFps.get()) {
+            if (CompactF3PlusConfig.showFps) {
                 float msPerFrame = fps > 0 ? (1000f / fps) : 0f;
 
                 if (useColors) {
@@ -215,12 +216,12 @@ public class CompactF3Plus {
                 }
             }
 
-            boolean showSys = CompactF3PlusConfig.showSystem.get();
-            boolean showLag = CompactF3PlusConfig.showLag.get();
-            boolean showTps = CompactF3PlusConfig.showTps.get();
+            boolean showSys = CompactF3PlusConfig.showSystem;
+            boolean showLag = CompactF3PlusConfig.showLag;
+            boolean showTps = CompactF3PlusConfig.showTps;
 
             if (showSys || showLag || showTps) {
-                List<TextSegment> sysSegs = new ArrayList<TextSegment>();
+                List<TextSegment> sysSegs = new ArrayList<>();
                 StringBuilder sysStr = new StringBuilder();
 
                 if (showSys) {
@@ -268,9 +269,16 @@ public class CompactF3Plus {
                     sysStr.append("Lag: ").append(stutterVal);
                 }
 
-                if (showTps && mc.isIntegratedServerRunning()) {
-                    float mspt = mc.getIntegratedServer().getTickTime();
+                if (showTps && mc.isIntegratedServerRunning() && mc.getIntegratedServer() != null) {
+                    long[] tickTimeArray = mc.getIntegratedServer().tickTimeArray;
+                    double meanTickTime = 0.0;
+                    for (long t : tickTimeArray) {
+                        meanTickTime += t;
+                    }
+                    meanTickTime = meanTickTime / tickTimeArray.length;
+                    double mspt = meanTickTime * 1.0E-6D;
                     double tps = mspt > 0.0 ? Math.min(20.0, 1000.0 / mspt) : 20.0;
+                    
                     int tpsColor = 0x55FF55;
                     if (tps < 19.0) {
                         tpsColor = 0xFFFF55;
@@ -301,13 +309,13 @@ public class CompactF3Plus {
                 }
             }
 
-            if (CompactF3PlusConfig.showCoords.get()) {
-                nextLine().addSegment("XYZ: " + (Math.round(player.getPosX() * 10) / 10.0) + ", "
-                        + (Math.round(player.getPosY() * 10) / 10.0) + ", "
-                        + (Math.round(player.getPosZ() * 10) / 10.0));
+            if (CompactF3PlusConfig.showCoords) {
+                nextLine().addSegment("XYZ: " + (Math.round(player.posX * 10) / 10.0) + ", "
+                        + (Math.round(player.posY * 10) / 10.0) + ", "
+                        + (Math.round(player.posZ * 10) / 10.0));
             }
 
-            if (CompactF3PlusConfig.showSubchunk.get()) {
+            if (CompactF3PlusConfig.showSubchunk) {
                 BlockPos pos = player.getPosition();
                 int cx = pos.getX() >> 4;
                 int cy = pos.getY() >> 4;
@@ -317,7 +325,7 @@ public class CompactF3Plus {
                 nextLine().addSegment(subchunkLine);
             }
 
-            if (CompactF3PlusConfig.showLocalDifficulty.get()) {
+            if (CompactF3PlusConfig.showLocalDifficulty) {
                 net.minecraft.world.DifficultyInstance diff = player.world.getDifficultyForLocation(player.getPosition());
                 float effective = diff.getAdditionalDifficulty();
                 float clamped = diff.getClampedAdditionalDifficulty();
@@ -325,8 +333,8 @@ public class CompactF3Plus {
                         + (Math.round(clamped * 100) / 100.0));
             }
 
-            if (CompactF3PlusConfig.showEntities.get()) {
-                String debugEntities = mc.worldRenderer.getDebugInfoEntities();
+            if (CompactF3PlusConfig.showEntities) {
+                String debugEntities = mc.renderGlobal.getDebugInfoEntities();
                 String eCount = debugEntities;
                 int commaIdx = debugEntities.indexOf(',');
                 if (commaIdx != -1) {
@@ -336,8 +344,8 @@ public class CompactF3Plus {
                 nextLine().addSegment("Entities: " + eCount);
             }
 
-            boolean showSes = CompactF3PlusConfig.showSession.get();
-            boolean showPing = CompactF3PlusConfig.showPing.get();
+            boolean showSes = CompactF3PlusConfig.showSession;
+            boolean showPing = CompactF3PlusConfig.showPing;
             if (showSes || showPing) {
                 StringBuilder sessionLine = new StringBuilder();
                 if (showSes) {
@@ -369,9 +377,9 @@ public class CompactF3Plus {
                 }
             }
 
-            if (CompactF3PlusConfig.showSpeed.get()) {
-                Vector3d now = player.getPositionVec();
-                Vector3d prev = new Vector3d(player.prevPosX, player.prevPosY, player.prevPosZ);
+            if (CompactF3PlusConfig.showSpeed) {
+                Vec3d now = player.getPositionVector();
+                Vec3d prev = new Vec3d(player.prevPosX, player.prevPosY, player.prevPosZ);
                 double dx = now.x - prev.x;
                 double dy = now.y - prev.y;
                 double dz = now.z - prev.z;
@@ -379,7 +387,7 @@ public class CompactF3Plus {
                 double speedHorizontal = Math.sqrt(dx * dx + dz * dz) * 20.0;
                 double speedVertical = dy * 20.0;
 
-                if (CompactF3PlusConfig.detailedSpeed.get()) {
+                if (CompactF3PlusConfig.detailedSpeed) {
                     double speedKmh = speed * 3.6;
                     double speedKmhHorizontal = speedHorizontal * 3.6;
                     double speedKmhVertical = speedVertical * 3.6;
@@ -398,7 +406,7 @@ public class CompactF3Plus {
                 }
             }
 
-            if (CompactF3PlusConfig.showFacing.get()) {
+            if (CompactF3PlusConfig.showFacing) {
                 float yaw = player.rotationYaw % 360;
                 if (yaw < 0) {
                     yaw += 360;
@@ -408,15 +416,15 @@ public class CompactF3Plus {
                 nextLine().addSegment("Facing: " + direction + " (" + (Math.round(yaw * 10) / 10.0) + "\u00B0)");
             }
 
-            if (CompactF3PlusConfig.showPitch.get()) {
+            if (CompactF3PlusConfig.showPitch) {
                 float pitch = player.rotationPitch;
                 nextLine().addSegment("Pitch: " + (Math.round(pitch * 10) / 10.0) + "\u00B0");
             }
 
-            boolean bTime = CompactF3PlusConfig.showTime.get();
-            boolean bDay = CompactF3PlusConfig.showDay.get();
+            boolean bTime = CompactF3PlusConfig.showTime;
+            boolean bDay = CompactF3PlusConfig.showDay;
             if (bTime || bDay) {
-                long totalTicks = player.world.getDayTime();
+                long totalTicks = player.world.getWorldTime();
                 StringBuilder timeLine = new StringBuilder();
                 if (bTime) {
                     long ticks = totalTicks % 24000;
@@ -438,23 +446,21 @@ public class CompactF3Plus {
                 }
             }
 
-            if (CompactF3PlusConfig.showLight.get()) {
+            if (CompactF3PlusConfig.showLight) {
                 BlockPos blockPos = player.getPosition();
-                int blockLight = player.world.getLightFor(LightType.BLOCK, blockPos);
-                int skyLight = player.world.getLightFor(LightType.SKY, blockPos);
+                int blockLight = player.world.getLightFor(EnumSkyBlock.BLOCK, blockPos);
+                int skyLight = player.world.getLightFor(EnumSkyBlock.SKY, blockPos);
                 nextLine().addSegment("Light: " + blockLight + " block | " + skyLight + " sky");
             }
 
-            if (CompactF3PlusConfig.showBiome.get()) {
+            if (CompactF3PlusConfig.showBiome) {
                 Biome biomeObj = player.world.getBiome(player.getPosition());
-                ResourceLocation biomeId = biomeObj.getRegistryName();
-                String biome = biomeId != null ? biomeId.toString() : "unknown";
+                String biome = biomeObj.getRegistryName() != null ? biomeObj.getRegistryName().toString() : "unknown";
                 nextLine().addSegment("Biome: " + biome);
             }
 
-            if (CompactF3PlusConfig.showDimension.get()) {
-                RegistryKey<World> dimensionKey = player.world.getDimensionKey();
-                String dimension = dimensionKey != null ? dimensionKey.getLocation().toString() : "unknown";
+            if (CompactF3PlusConfig.showDimension) {
+                String dimension = player.world.provider.getDimensionType().getName();
                 nextLine().addSegment("Dimension: " + dimension);
             }
 
@@ -462,7 +468,6 @@ public class CompactF3Plus {
                 return;
             }
 
-            MatrixStack matrix = event.getMatrixStack();
             int drawX = 10;
             int drawY = 10;
             int lineHeight = 10;
@@ -478,47 +483,31 @@ public class CompactF3Plus {
             }
 
             int padding = 4;
-            int opacitySetting = CompactF3PlusConfig.backgroundOpacity.get();
+            int opacitySetting = CompactF3PlusConfig.backgroundOpacity;
             int alphaInt = (int) ((opacitySetting / 100.0f) * 255.0f);
             int bgColor = (alphaInt << 24) | 0x000000;
 
-            AbstractGui.fill(
-                    matrix,
+            Gui.drawRect(
                     drawX - padding,
                     drawY - padding,
                     drawX + maxWidth + padding,
                     drawY + currentLineIndex * lineHeight + padding,
                     bgColor);
 
-            boolean drawShadow = CompactF3PlusConfig.textShadow.get();
+            boolean drawShadow = CompactF3PlusConfig.textShadow;
             for (int i = 0; i < currentLineIndex; i++) {
                 HudLine line = lines.get(i);
                 int x = drawX;
                 for (int j = 0; j < line.currentSegmentIndex; j++) {
                     TextSegment seg = line.segments.get(j);
                     if (drawShadow) {
-                        font.drawStringWithShadow(matrix, seg.text, x, drawY, seg.color);
+                        font.drawStringWithShadow(seg.text, x, drawY, seg.color);
                     } else {
-                        font.drawString(matrix, seg.text, x, drawY, seg.color);
+                        font.drawString(seg.text, x, drawY, seg.color);
                     }
                     x += font.getStringWidth(seg.text);
                 }
                 drawY += lineHeight;
-            }
-        }
-
-        private static int getCurrentFps(Minecraft mc) {
-            String fpsString = mc.debug;
-            if (fpsString == null || fpsString.isEmpty()) {
-                return 0;
-            }
-
-            int separator = fpsString.indexOf(' ');
-            String fpsPart = separator >= 0 ? fpsString.substring(0, separator) : fpsString;
-            try {
-                return Integer.parseInt(fpsPart);
-            } catch (NumberFormatException ignored) {
-                return 0;
             }
         }
 
@@ -552,7 +541,7 @@ public class CompactF3Plus {
         }
 
         private static class HudLine {
-            final List<TextSegment> segments = new ArrayList<TextSegment>();
+            final List<TextSegment> segments = new ArrayList<>();
             int currentSegmentIndex = 0;
 
             void reset() {
