@@ -12,11 +12,18 @@ import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.IntegerProperty;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.lwjgl.glfw.GLFW;
 import net.minecraft.client.resources.sounds.SoundInstance;
@@ -25,6 +32,7 @@ import net.minecraft.sounds.SoundSource;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public final class CompactHudRenderer {
         private static boolean compactHudEnabled = false;
@@ -569,25 +577,65 @@ public final class CompactHudRenderer {
                 }
             }
 
+            // Crop growth and the targeted-block line share one crosshair pick.
+            BlockState targetState = null;
+            if ((CompactF3PlusConfig.showCropGrowth || CompactF3PlusConfig.showTargetBlock)
+                    && mc.hitResult instanceof BlockHitResult hit
+                    && hit.getType() == HitResult.Type.BLOCK) {
+                targetState = player.level().getBlockState(hit.getBlockPos());
+            }
+
             // Crop Growth
-            if (CompactF3PlusConfig.showCropGrowth && mc.hitResult != null && mc.hitResult.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
-                BlockPos targetPos = ((net.minecraft.world.phys.BlockHitResult) mc.hitResult).getBlockPos();
-                net.minecraft.world.level.block.state.BlockState state = player.level().getBlockState(targetPos);
-                net.minecraft.world.level.block.state.properties.Property<?> ageProp = state.getProperties().stream().filter(p -> p.getName().equals("age")).findFirst().orElse(null);
-                if (ageProp instanceof net.minecraft.world.level.block.state.properties.IntegerProperty intProp) {
-                    int age = state.getValue(intProp);
+            if (CompactF3PlusConfig.showCropGrowth && targetState != null) {
+                Property<?> ageProp = targetState.getProperties().stream()
+                        .filter(p -> p.getName().equals("age")).findFirst().orElse(null);
+                if (ageProp instanceof IntegerProperty intProp) {
+                    int age = targetState.getValue(intProp);
                     int maxAge = intProp.getPossibleValues().stream().max(Integer::compareTo).orElse(age);
                     int percent = (int) (((float) age / maxAge) * 100);
                     nextLine().addSegment("Crop Age: " + age + "/" + maxAge + " (" + percent + "%)");
                 }
             }
 
+            // Targeted block — registry id, so modded blocks resolve too.
+            if (CompactF3PlusConfig.showTargetBlock && targetState != null) {
+                HudLine line = nextLine();
+                line.addSegment("Block: " + BuiltInRegistries.BLOCK.getKey(targetState.getBlock()));
+                if (CompactF3PlusConfig.showTargetProperties) {
+                    String props = targetState.getValues()
+                            .map(v -> v.property().getName() + "=" + v.valueName())
+                            .collect(Collectors.joining(", "));
+                    if (!props.isEmpty()) {
+                        line.addSegment(" [" + props + "]", 0xAAAAAA);
+                    }
+                }
+            }
+
+            // Targeted fluid needs its OWN pick: mc.hitResult clips with
+            // ClipContext.Fluid.NONE and passes straight through water, so reusing it
+            // would leave this line permanently empty.
+            if (CompactF3PlusConfig.showTargetFluid) {
+                HitResult fluidHit = player.pick(player.blockInteractionRange(),
+                        delta.getGameTimeDeltaPartialTick(false), true);
+                if (fluidHit instanceof BlockHitResult fluidBlockHit
+                        && fluidHit.getType() == HitResult.Type.BLOCK) {
+                    FluidState fluid = player.level().getFluidState(fluidBlockHit.getBlockPos());
+                    if (!fluid.isEmpty()) {
+                        nextLine().addSegment("Fluid: " + BuiltInRegistries.FLUID.getKey(fluid.getType()));
+                    }
+                }
+            }
+
+            // Targeted entity
+            if (CompactF3PlusConfig.showTargetEntity && mc.crosshairPickEntity != null) {
+                nextLine().addSegment("Entity: "
+                        + BuiltInRegistries.ENTITY_TYPE.getKey(mc.crosshairPickEntity.getType()));
+            }
+
             if (currentLineIndex == 0)
                 return;
 
             // Draw
-            int drawX = 10;
-            int drawY = 10;
             int lineHeight = 10;
 
             int maxWidth = 0;
@@ -601,16 +649,32 @@ public final class CompactHudRenderer {
             }
             int padding = 4;
 
+            // Anchor the measured box to the configured corner. Offsets are the gap
+            // between the box edge and that corner, so the panel never drifts off
+            // screen when it grows.
+            int boxWidth = maxWidth + padding * 2;
+            int boxHeight = currentLineIndex * lineHeight + padding * 2;
+            int screenWidth = mc.getWindow().getGuiScaledWidth();
+            int screenHeight = mc.getWindow().getGuiScaledHeight();
+            int anchor = CompactF3PlusConfig.hudAnchor;
+            boolean anchorRight = anchor == 1 || anchor == 3;
+            boolean anchorBottom = anchor == 2 || anchor == 3;
+
+            int boxX = anchorRight
+                    ? screenWidth - boxWidth - CompactF3PlusConfig.hudOffsetX
+                    : CompactF3PlusConfig.hudOffsetX;
+            int boxY = anchorBottom
+                    ? screenHeight - boxHeight - CompactF3PlusConfig.hudOffsetY
+                    : CompactF3PlusConfig.hudOffsetY;
+
+            int drawX = boxX + padding;
+            int drawY = boxY + padding;
+
             int opacitySetting = CompactF3PlusConfig.backgroundOpacity;
             int alphaInt = (int) ((opacitySetting / 100.0f) * 255.0f);
             int bgColor = (alphaInt << 24) | 0x000000;
 
-            guiGraphics.fill(
-                    drawX - padding,
-                    drawY - padding,
-                    drawX + maxWidth + padding,
-                    drawY + currentLineIndex * lineHeight + padding,
-                    bgColor);
+            guiGraphics.fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, bgColor);
 
             boolean drawShadow = CompactF3PlusConfig.textShadow;
             for (int i = 0; i < currentLineIndex; i++) {

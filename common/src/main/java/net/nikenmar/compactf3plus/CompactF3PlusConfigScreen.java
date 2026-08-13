@@ -22,6 +22,8 @@ public class CompactF3PlusConfigScreen extends Screen {
     private static final int SCROLLBAR_WIDTH = 6;
     private static final int SPACING = 24;
     private static final int CONTENT_TOP = 40;
+    // Index order must match CompactF3PlusConfig.hudAnchor.
+    private static final String[] ANCHOR_NAMES = {"Top Left", "Top Right", "Bottom Left", "Bottom Right"};
 
     private int getContentHeight() {
         return entries.size() * SPACING;
@@ -70,6 +72,19 @@ public class CompactF3PlusConfigScreen extends Screen {
         entries.add(toggle("Show Durability",     () -> CompactF3PlusConfig.showDurability,     v -> CompactF3PlusConfig.showDurability = v));
         entries.add(toggle("Show Crop Growth",    () -> CompactF3PlusConfig.showCropGrowth,     v -> CompactF3PlusConfig.showCropGrowth = v));
         entries.add(toggle("Show Music Track",    () -> CompactF3PlusConfig.showMusicTrack,     v -> CompactF3PlusConfig.showMusicTrack = v));
+        entries.add(toggle("Show Targeted Block", () -> CompactF3PlusConfig.showTargetBlock,    v -> CompactF3PlusConfig.showTargetBlock = v));
+        entries.add(toggle("Show Targeted Fluid", () -> CompactF3PlusConfig.showTargetFluid,    v -> CompactF3PlusConfig.showTargetFluid = v));
+        entries.add(toggle("Show Targeted Entity",() -> CompactF3PlusConfig.showTargetEntity,   v -> CompactF3PlusConfig.showTargetEntity = v));
+        entries.add(toggle("Show Block Properties",() -> CompactF3PlusConfig.showTargetProperties, v -> CompactF3PlusConfig.showTargetProperties = v));
+
+        entries.add(new HeaderEntry("Position"));
+        entries.add(new CycleEntry("Anchor", () -> CompactF3PlusConfig.hudAnchor,
+                v -> CompactF3PlusConfig.hudAnchor = v, ANCHOR_NAMES));
+        entries.add(new IntEntry("Offset X", () -> CompactF3PlusConfig.hudOffsetX,
+                v -> CompactF3PlusConfig.hudOffsetX = v, 0, CompactF3PlusConfig.MAX_HUD_OFFSET, "px"));
+        entries.add(new IntEntry("Offset Y", () -> CompactF3PlusConfig.hudOffsetY,
+                v -> CompactF3PlusConfig.hudOffsetY = v, 0, CompactF3PlusConfig.MAX_HUD_OFFSET, "px"));
+
         entries.add(new HeaderEntry("Other"));
         entries.add(toggle("Replace Default F3",          () -> CompactF3PlusConfig.replaceF3,         v -> CompactF3PlusConfig.replaceF3 = v));
         entries.add(toggle("Show Gizmo (if Replace F3)",  () -> CompactF3PlusConfig.showGizmo,         v -> CompactF3PlusConfig.showGizmo = v));
@@ -77,7 +92,8 @@ public class CompactF3PlusConfigScreen extends Screen {
         entries.add(toggle("Color Indicators (FPS/TPS)",  () -> CompactF3PlusConfig.colorIndicators,   v -> CompactF3PlusConfig.colorIndicators = v));
         entries.add(toggle("Text Shadow",                 () -> CompactF3PlusConfig.textShadow,        v -> CompactF3PlusConfig.textShadow = v));
         entries.add(toggle("Detailed Speed",              () -> CompactF3PlusConfig.detailedSpeed,     v -> CompactF3PlusConfig.detailedSpeed = v));
-        entries.add(new IntEntry("Background Opacity", () -> CompactF3PlusConfig.backgroundOpacity, v -> CompactF3PlusConfig.backgroundOpacity = v));
+        entries.add(new IntEntry("Background Opacity", () -> CompactF3PlusConfig.backgroundOpacity,
+                v -> CompactF3PlusConfig.backgroundOpacity = v, 0, 100, "%"));
 
         layoutButtons();
     }
@@ -111,20 +127,31 @@ public class CompactF3PlusConfigScreen extends Screen {
                         })
                         .bounds(centerX, y, btnWidth, btnHeight)
                         .build());
-            } else if (entry instanceof IntEntry opacity) {
+            } else if (entry instanceof CycleEntry cycle) {
+                addRenderableWidget(Button.builder(
+                        Component.literal(cycle.label + ": " + cycle.options[cycle.get.getAsInt()]),
+                        btn -> {
+                            int next = (cycle.get.getAsInt() + 1) % cycle.options.length;
+                            cycle.set.accept(next);
+                            CompactF3PlusConfig.save();
+                            btn.setMessage(Component.literal(cycle.label + ": " + cycle.options[next]));
+                        })
+                        .bounds(centerX, y, btnWidth, btnHeight)
+                        .build());
+            } else if (entry instanceof IntEntry slider) {
                 addRenderableWidget(new AbstractSliderButton(centerX, y, btnWidth, btnHeight,
-                        Component.literal(opacity.label + ": " + opacity.get.getAsInt() + "%"),
-                        opacity.get.getAsInt() / 100.0D) {
+                        Component.literal(slider.label + ": " + slider.get.getAsInt() + slider.suffix),
+                        slider.normalize(slider.get.getAsInt())) {
 
                     @Override
                     protected void updateMessage() {
-                        this.setMessage(Component.literal(opacity.label + ": " + opacity.get.getAsInt() + "%"));
+                        this.setMessage(Component.literal(
+                                slider.label + ": " + slider.get.getAsInt() + slider.suffix));
                     }
 
                     @Override
                     protected void applyValue() {
-                        int newValue = (int) Math.round(this.value * 100.0D);
-                        opacity.set.accept(newValue);
+                        slider.set.accept(slider.denormalize(this.value));
                         CompactF3PlusConfig.save();
                     }
                 });
@@ -235,6 +262,19 @@ public class CompactF3PlusConfigScreen extends Screen {
     private record ToggleEntry(String label, BooleanSupplier get, Consumer<Boolean> set) implements ConfigEntry {
     }
 
-    private record IntEntry(String label, IntSupplier get, IntConsumer set) implements ConfigEntry {
+    private record CycleEntry(String label, IntSupplier get, IntConsumer set, String[] options)
+            implements ConfigEntry {
+    }
+
+    private record IntEntry(String label, IntSupplier get, IntConsumer set, int min, int max, String suffix)
+            implements ConfigEntry {
+
+        double normalize(int value) {
+            return (double) (value - min) / (max - min);
+        }
+
+        int denormalize(double sliderValue) {
+            return min + (int) Math.round(sliderValue * (max - min));
+        }
     }
 }
