@@ -17,24 +17,28 @@ dependencies {
 }
 
 processResources {
-    inputs.property "version", project.version
+    // Every property expanded below must also be declared as a task input, or
+    // Gradle keeps the task UP-TO-DATE when only one of them changes and ships a
+    // fabric.mod.json with stale metadata (e.g. an old version range).
+    var expandProperties = [
+            "version"                : project.version,
+            "mod_id"                 : project.mod_id,
+            "mod_name"               : project.mod_name,
+            "mod_description"        : project.mod_description,
+            "mod_authors"            : project.mod_authors,
+            "mod_license"            : project.mod_license,
+            "minecraft_version_range": project.minecraft_version_range,
+            "loader_version_range"   : project.loader_version_range
+    ]
+    inputs.properties expandProperties
     filesMatching("fabric.mod.json") {
-        expand(
-                "version": project.version,
-                "mod_id": project.mod_id,
-                "mod_name": project.mod_name,
-                "mod_description": project.mod_description,
-                "mod_authors": project.mod_authors,
-                "mod_license": project.mod_license,
-                "minecraft_version_range": project.minecraft_version_range,
-                "loader_version_range": project.loader_version_range
-        )
+        expand expandProperties
     }
 }
 
 tasks.named('jar', Jar).configure {
     destinationDirectory.set(rootProject.layout.buildDirectory.dir("libs"))
-    archiveFileName = "${mod_id}-${mod_version}-fabric-26.1.x.jar"
+    archiveFileName = "${mod_id}-${mod_version}-fabric-${mc_line}.jar"
     from project(":common").sourceSets.main.output
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

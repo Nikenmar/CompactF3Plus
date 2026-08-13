@@ -52,7 +52,7 @@ neoForge.ideSyncTask generateModMetadata
 
 tasks.named('jar', Jar).configure {
     destinationDirectory.set(rootProject.layout.buildDirectory.dir("libs"))
-    archiveFileName = "${mod_id}-${mod_version}-neoforge-26.1.x.jar"
+    archiveFileName = "${mod_id}-${mod_version}-neoforge-${mc_line}.jar"
     from project(":common").sourceSets.main.output
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
