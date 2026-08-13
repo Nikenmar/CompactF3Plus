@@ -24,12 +24,25 @@ public final class CompactF3PlusConfig {
         public static final ForgeConfigSpec.BooleanValue showLight;
         public static final ForgeConfigSpec.BooleanValue showBiome;
         public static final ForgeConfigSpec.BooleanValue showDimension;
+        public static final ForgeConfigSpec.BooleanValue showDurability;
+        public static final ForgeConfigSpec.BooleanValue showCropGrowth;
+        public static final ForgeConfigSpec.BooleanValue showMusicTrack;
+        public static final ForgeConfigSpec.BooleanValue showTargetBlock;
+        public static final ForgeConfigSpec.BooleanValue showTargetFluid;
+        public static final ForgeConfigSpec.BooleanValue showTargetEntity;
+        public static final ForgeConfigSpec.BooleanValue showTargetProperties;
         public static final ForgeConfigSpec.BooleanValue colorIndicators;
         public static final ForgeConfigSpec.BooleanValue textShadow;
         public static final ForgeConfigSpec.BooleanValue replaceF3;
         public static final ForgeConfigSpec.BooleanValue showGizmo;
         public static final ForgeConfigSpec.BooleanValue enabledByDefault;
         public static final ForgeConfigSpec.IntValue backgroundOpacity;
+        // 0 = top-left, 1 = top-right, 2 = bottom-left, 3 = bottom-right.
+        public static final int ANCHOR_COUNT = 4;
+        public static final int MAX_HUD_OFFSET = 200;
+        public static final ForgeConfigSpec.IntValue hudAnchor;
+        public static final ForgeConfigSpec.IntValue hudOffsetX;
+        public static final ForgeConfigSpec.IntValue hudOffsetY;
 
         static {
                 ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -55,6 +68,21 @@ public final class CompactF3PlusConfig {
                 showLight = builder.comment("Show light level line").define("showLight", true);
                 showBiome = builder.comment("Show biome line").define("showBiome", true);
                 showDimension = builder.comment("Show dimension line").define("showDimension", false);
+                showDurability = builder.comment("Show durability of damaged held items")
+                                .define("showDurability", false);
+                showCropGrowth = builder.comment("Show growth stage of the targeted crop")
+                                .define("showCropGrowth", false);
+                showMusicTrack = builder.comment("Show the currently playing music or record")
+                                .define("showMusicTrack", false);
+                showTargetBlock = builder.comment("Show the registry id of the targeted block")
+                                .define("showTargetBlock", false);
+                showTargetFluid = builder.comment("Show the registry id of the targeted fluid")
+                                .define("showTargetFluid", false);
+                showTargetEntity = builder.comment("Show the registry id of the targeted entity")
+                                .define("showTargetEntity", false);
+                showTargetProperties = builder
+                                .comment("Append blockstate properties to the targeted block line")
+                                .define("showTargetProperties", false);
 
                 builder.pop();
 
@@ -90,6 +118,23 @@ public final class CompactF3PlusConfig {
 
                 builder.pop();
 
+                builder.comment("HUD Position").push("position");
+
+                hudAnchor = builder
+                                .comment("Screen corner the HUD is anchored to: 0 = top-left, 1 = top-right,",
+                                                "2 = bottom-left, 3 = bottom-right")
+                                .defineInRange("hudAnchor", 0, 0, ANCHOR_COUNT - 1);
+
+                hudOffsetX = builder
+                                .comment("Horizontal gap between the HUD box and the anchored corner, in pixels")
+                                .defineInRange("hudOffsetX", 6, 0, MAX_HUD_OFFSET);
+
+                hudOffsetY = builder
+                                .comment("Vertical gap between the HUD box and the anchored corner, in pixels")
+                                .defineInRange("hudOffsetY", 6, 0, MAX_HUD_OFFSET);
+
+                builder.pop();
+
                 SPEC = builder.build();
         }
 
@@ -112,6 +157,13 @@ public final class CompactF3PlusConfig {
                 showLight.set(true);
                 showBiome.set(true);
                 showDimension.set(false);
+                showDurability.set(false);
+                showCropGrowth.set(false);
+                showMusicTrack.set(false);
+                showTargetBlock.set(false);
+                showTargetFluid.set(false);
+                showTargetEntity.set(false);
+                showTargetProperties.set(false);
 
                 colorIndicators.set(false);
                 textShadow.set(false);
@@ -120,6 +172,9 @@ public final class CompactF3PlusConfig {
                 showGizmo.set(false);
                 enabledByDefault.set(false);
                 backgroundOpacity.set(25);
+                hudAnchor.set(0);
+                hudOffsetX.set(6);
+                hudOffsetY.set(6);
                 SPEC.save();
         }
 
