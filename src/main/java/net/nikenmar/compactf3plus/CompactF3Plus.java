@@ -7,11 +7,22 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.IntegerProperty;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.event.sound.PlaySoundEvent;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -27,6 +38,7 @@ import org.lwjgl.glfw.GLFW;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Mod("compactf3plus")
 public class CompactF3Plus {
@@ -35,15 +47,22 @@ public class CompactF3Plus {
         modContainer.registerExtensionPoint(IConfigScreenFactory.class,
                 (container, parent) -> new CompactF3PlusConfigScreen(parent));
         modBus.addListener(HudRenderer::onRegisterKeyMappings);
+        NeoForge.EVENT_BUS.addListener(HudRenderer::onPreRenderGui);
         NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGui);
         NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiLayerPre);
         NeoForge.EVENT_BUS.addListener(HudRenderer::onRenderGuiLayerPost);
         NeoForge.EVENT_BUS.addListener(HudRenderer::onPlayerLogin);
+        NeoForge.EVENT_BUS.addListener(HudRenderer::onPlaySound);
     }
 
     private static final class HudRenderer {
         private static boolean compactHudEnabled = false;
+        // True when the active HUD session was opened by pressing F3. F8 and
+        // enabledByDefault leave it false, so they never bring up the gizmo.
+        private static boolean compactHudOpenedViaF3 = false;
         private static boolean wasDebugShowing = false;
+        private static SoundInstance currentMusicInstance = null;
+        private static String currentMusicTrackName = "";
         private static final int AVG_FPS_SECONDS = 60;
         private static final LinkedList<Integer> fpsHistory = new LinkedList<>();
         private static long lastFpsSampleTime = 0;
@@ -120,26 +139,89 @@ public class CompactF3Plus {
             event.register(TOGGLE_HUD);
         }
 
+        private static String formatTrackName(String rawPath) {
+            if (rawPath == null)
+                return "Unknown";
+            String[] parts = rawPath.split("[/.]");
+            String fileName = parts[parts.length - 1];
+
+            StringBuilder sb = new StringBuilder();
+            for (String word : fileName.split("_")) {
+                if (!word.isEmpty()) {
+                    if (sb.length() > 0)
+                        sb.append(' ');
+                    sb.append(Character.toUpperCase(word.charAt(0)));
+                    if (word.length() > 1)
+                        sb.append(word.substring(1));
+                }
+            }
+            return sb.toString();
+        }
+
+        public static void onPlaySound(PlaySoundEvent event) {
+            SoundInstance sound = event.getSound();
+            if (sound != null && (sound.getSource() == SoundSource.MUSIC || sound.getSource() == SoundSource.RECORDS)) {
+                currentMusicInstance = sound;
+                currentMusicTrackName = "Unknown";
+            }
+        }
+
+        // Renders a generic "name=value" for any property without knowing its type.
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private static String propertyValueName(Property<?> property, Comparable<?> value) {
+            return ((Property) property).getName((Comparable) value);
+        }
+
         public static void onPlayerLogin(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
             compactHudEnabled = CompactF3PlusConfig.enabledByDefault.get();
+            compactHudOpenedViaF3 = false;
+            wasDebugShowing = false;
         }
 
         private static boolean toggledForCrosshair = false;
 
+        // Runs before the whole HUD pipeline. Detects the F3 toggle and then CLEARS
+        // the vanilla debug flag, rather than cancelling the DEBUG_OVERLAY layer.
+        //
+        // Cancelling the layer used to leave showDebugScreen() == true for the entire
+        // frame, so every other mod that politely hides its HUD while F3 is open
+        // (Immersive Overlays, minimaps, Jade/TOP, ...) went blank whenever our
+        // compact HUD was opened with F3. Gui guards the debug overlay behind that
+        // same flag, so clearing it hides vanilla F3 just as effectively and stops
+        // lying to everyone else. Matches what the 26.1 branch already does.
+        public static void onPreRenderGui(RenderGuiEvent.Pre event) {
+            if (!CompactF3PlusConfig.replaceF3.get())
+                return;
+
+            Minecraft mc = Minecraft.getInstance();
+            boolean debugShowing = mc.getDebugOverlay().showDebugScreen();
+            if (debugShowing != wasDebugShowing) {
+                compactHudEnabled = !compactHudEnabled;
+                // True if F3 just opened the HUD; false if F3 just closed it.
+                compactHudOpenedViaF3 = compactHudEnabled;
+            }
+            if (debugShowing) {
+                mc.getDebugOverlay().toggleOverlay();
+            }
+            wasDebugShowing = false;
+        }
+
+        private static boolean wantGizmo() {
+            return CompactF3PlusConfig.showGizmo.get()
+                    && compactHudEnabled
+                    && compactHudOpenedViaF3;
+        }
+
+        // The 3D gizmo is drawn by the vanilla CROSSHAIR layer, gated on the same
+        // debug flag we just cleared. So switch it back on for the duration of that
+        // one layer when the gizmo is wanted — the inverse of what this used to do.
         public static void onRenderGuiLayerPre(RenderGuiLayerEvent.Pre event) {
             if (!CompactF3PlusConfig.replaceF3.get())
                 return;
 
-            if (event.getName().equals(VanillaGuiLayers.DEBUG_OVERLAY)) {
-                event.setCanceled(true);
-            }
-
-            if (!CompactF3PlusConfig.showGizmo.get()
-                    && event.getName().equals(VanillaGuiLayers.CROSSHAIR)
-                    && Minecraft.getInstance().getDebugOverlay().showDebugScreen()) {
-
-                // Temporarily disable the debug overlay state before the crosshair layer
-                // renders
+            if (event.getName().equals(VanillaGuiLayers.CROSSHAIR)
+                    && wantGizmo()
+                    && !Minecraft.getInstance().getDebugOverlay().showDebugScreen()) {
                 Minecraft.getInstance().getDebugOverlay().toggleOverlay();
                 toggledForCrosshair = true;
             }
@@ -147,7 +229,6 @@ public class CompactF3Plus {
 
         public static void onRenderGuiLayerPost(RenderGuiLayerEvent.Post event) {
             if (toggledForCrosshair && event.getName().equals(VanillaGuiLayers.CROSSHAIR)) {
-                // Restore the debug overlay state after the crosshair layer finishes rendering
                 Minecraft.getInstance().getDebugOverlay().toggleOverlay();
                 toggledForCrosshair = false;
             }
@@ -155,28 +236,23 @@ public class CompactF3Plus {
 
         public static void onRenderGui(RenderGuiEvent.Post event) {
             Minecraft mc = Minecraft.getInstance();
-            if (TOGGLE_HUD.consumeClick())
+            while (TOGGLE_HUD.consumeClick()) {
                 compactHudEnabled = !compactHudEnabled;
+                // F8 opens the HUD in "plain" mode — never with the gizmo.
+                compactHudOpenedViaF3 = false;
+            }
             LocalPlayer player = mc.player;
             if (player == null || mc.options.hideGui)
                 return;
 
             boolean debugShowing = mc.getDebugOverlay().showDebugScreen();
             if (CompactF3PlusConfig.replaceF3.get()) {
-                if (debugShowing != wasDebugShowing) {
-                    compactHudEnabled = !compactHudEnabled;
-                    wasDebugShowing = debugShowing;
-                }
-
-                if (!compactHudEnabled && debugShowing) {
-                    mc.getDebugOverlay().toggleOverlay();
-                    wasDebugShowing = false;
-                }
-
+                // replaceF3=on: the state machine already ran in onPreRenderGui.
                 if (!compactHudEnabled)
                     return;
             } else {
                 wasDebugShowing = debugShowing;
+                // replaceF3=off: don't stack our HUD on top of a real F3 screen.
                 if (!compactHudEnabled || debugShowing)
                     return;
             }
@@ -511,12 +587,106 @@ public class CompactF3Plus {
                 nextLine().addSegment("Dimension: " + dimension);
             }
 
+            // Music Track
+            if (CompactF3PlusConfig.showMusicTrack.get() && currentMusicInstance != null) {
+                if (mc.getSoundManager().isActive(currentMusicInstance)) {
+                    try {
+                        if (currentMusicInstance.getSound() != null
+                                && currentMusicInstance.getSound().getLocation() != null) {
+                            String refined = formatTrackName(
+                                    currentMusicInstance.getSound().getLocation().getPath());
+                            if (!refined.equals("Unknown")) {
+                                currentMusicTrackName = refined;
+                            }
+                        } else if (currentMusicTrackName.equals("Unknown")) {
+                            currentMusicTrackName = formatTrackName(currentMusicInstance.getLocation().getPath());
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    nextLine().addSegment("Music: " + currentMusicTrackName);
+                } else {
+                    currentMusicInstance = null;
+                    currentMusicTrackName = "";
+                }
+            }
+
+            // Durability
+            if (CompactF3PlusConfig.showDurability.get()) {
+                String durLine = "";
+                ItemStack mainHand = player.getMainHandItem();
+                if (mainHand.isDamageableItem() && mainHand.isDamaged()) {
+                    durLine += (mainHand.getMaxDamage() - mainHand.getDamageValue()) + "/" + mainHand.getMaxDamage();
+                }
+                ItemStack offHand = player.getOffhandItem();
+                if (offHand.isDamageableItem() && offHand.isDamaged()) {
+                    if (!durLine.isEmpty())
+                        durLine += " | ";
+                    durLine += (offHand.getMaxDamage() - offHand.getDamageValue()) + "/" + offHand.getMaxDamage();
+                }
+                if (!durLine.isEmpty()) {
+                    nextLine().addSegment("Durability: " + durLine);
+                }
+            }
+
+            // Crop growth and the targeted-block line share one crosshair pick.
+            BlockState targetState = null;
+            if ((CompactF3PlusConfig.showCropGrowth.get() || CompactF3PlusConfig.showTargetBlock.get())
+                    && mc.hitResult instanceof BlockHitResult hit
+                    && hit.getType() == HitResult.Type.BLOCK) {
+                targetState = player.level().getBlockState(hit.getBlockPos());
+            }
+
+            // Crop Growth
+            if (CompactF3PlusConfig.showCropGrowth.get() && targetState != null) {
+                Property<?> ageProp = targetState.getProperties().stream()
+                        .filter(p -> p.getName().equals("age")).findFirst().orElse(null);
+                if (ageProp instanceof IntegerProperty intProp) {
+                    int age = targetState.getValue(intProp);
+                    int maxAge = intProp.getPossibleValues().stream().max(Integer::compareTo).orElse(age);
+                    int percent = (int) (((float) age / maxAge) * 100);
+                    nextLine().addSegment("Crop Age: " + age + "/" + maxAge + " (" + percent + "%)");
+                }
+            }
+
+            // Targeted block — registry id, so modded blocks resolve too.
+            if (CompactF3PlusConfig.showTargetBlock.get() && targetState != null) {
+                HudLine line = nextLine();
+                line.addSegment("Block: " + BuiltInRegistries.BLOCK.getKey(targetState.getBlock()));
+                if (CompactF3PlusConfig.showTargetProperties.get()) {
+                    String props = targetState.getValues().entrySet().stream()
+                            .map(e -> e.getKey().getName() + "=" + propertyValueName(e.getKey(), e.getValue()))
+                            .collect(Collectors.joining(", "));
+                    if (!props.isEmpty()) {
+                        line.addSegment(" [" + props + "]", 0xAAAAAA);
+                    }
+                }
+            }
+
+            // Targeted fluid needs its OWN pick: mc.hitResult clips with
+            // ClipContext.Fluid.NONE and passes straight through water, so reusing it
+            // would leave this line permanently empty.
+            if (CompactF3PlusConfig.showTargetFluid.get()) {
+                HitResult fluidHit = player.pick(player.blockInteractionRange(),
+                        event.getPartialTick().getGameTimeDeltaPartialTick(false), true);
+                if (fluidHit instanceof BlockHitResult fluidBlockHit
+                        && fluidHit.getType() == HitResult.Type.BLOCK) {
+                    FluidState fluid = player.level().getFluidState(fluidBlockHit.getBlockPos());
+                    if (!fluid.isEmpty()) {
+                        nextLine().addSegment("Fluid: " + BuiltInRegistries.FLUID.getKey(fluid.getType()));
+                    }
+                }
+            }
+
+            // Targeted entity
+            if (CompactF3PlusConfig.showTargetEntity.get() && mc.crosshairPickEntity != null) {
+                nextLine().addSegment("Entity: "
+                        + BuiltInRegistries.ENTITY_TYPE.getKey(mc.crosshairPickEntity.getType()));
+            }
+
             if (currentLineIndex == 0)
                 return;
 
             // Draw
-            int drawX = 10;
-            int drawY = 10;
             int lineHeight = 10;
 
             int maxWidth = 0;
@@ -530,16 +700,32 @@ public class CompactF3Plus {
             }
             int padding = 4;
 
+            // Anchor the measured box to the configured corner. Offsets are the gap
+            // between the box edge and that corner, so the panel never drifts off
+            // screen when it grows.
+            int boxWidth = maxWidth + padding * 2;
+            int boxHeight = currentLineIndex * lineHeight + padding * 2;
+            int screenWidth = mc.getWindow().getGuiScaledWidth();
+            int screenHeight = mc.getWindow().getGuiScaledHeight();
+            int anchor = CompactF3PlusConfig.hudAnchor.get();
+            boolean anchorRight = anchor == 1 || anchor == 3;
+            boolean anchorBottom = anchor == 2 || anchor == 3;
+
+            int boxX = anchorRight
+                    ? screenWidth - boxWidth - CompactF3PlusConfig.hudOffsetX.get()
+                    : CompactF3PlusConfig.hudOffsetX.get();
+            int boxY = anchorBottom
+                    ? screenHeight - boxHeight - CompactF3PlusConfig.hudOffsetY.get()
+                    : CompactF3PlusConfig.hudOffsetY.get();
+
+            int drawX = boxX + padding;
+            int drawY = boxY + padding;
+
             int opacitySetting = CompactF3PlusConfig.backgroundOpacity.get();
             int alphaInt = (int) ((opacitySetting / 100.0f) * 255.0f);
             int bgColor = (alphaInt << 24) | 0x000000;
 
-            event.getGuiGraphics().fill(
-                    drawX - padding,
-                    drawY - padding,
-                    drawX + maxWidth + padding,
-                    drawY + currentLineIndex * lineHeight + padding,
-                    bgColor);
+            event.getGuiGraphics().fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, bgColor);
 
             boolean drawShadow = CompactF3PlusConfig.textShadow.get();
             for (int i = 0; i < currentLineIndex; i++) {

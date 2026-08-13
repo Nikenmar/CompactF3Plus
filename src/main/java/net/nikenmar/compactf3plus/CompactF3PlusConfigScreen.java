@@ -18,6 +18,8 @@ public class CompactF3PlusConfigScreen extends Screen {
     private static final int SCROLLBAR_WIDTH = 6;
     private static final int SPACING = 24;
     private static final int CONTENT_TOP = 40;
+    // Index order must match CompactF3PlusConfig.hudAnchor.
+    private static final String[] ANCHOR_NAMES = {"Top Left", "Top Right", "Bottom Left", "Bottom Right"};
 
     private int getContentHeight() {
         return entries.size() * SPACING;
@@ -59,6 +61,21 @@ public class CompactF3PlusConfigScreen extends Screen {
         entries.add(new ToggleEntry("Show Light", CompactF3PlusConfig.showLight));
         entries.add(new ToggleEntry("Show Biome", CompactF3PlusConfig.showBiome));
         entries.add(new ToggleEntry("Show Dimension", CompactF3PlusConfig.showDimension));
+        entries.add(new ToggleEntry("Show Durability", CompactF3PlusConfig.showDurability));
+        entries.add(new ToggleEntry("Show Crop Growth", CompactF3PlusConfig.showCropGrowth));
+        entries.add(new ToggleEntry("Show Music Track", CompactF3PlusConfig.showMusicTrack));
+        entries.add(new ToggleEntry("Show Targeted Block", CompactF3PlusConfig.showTargetBlock));
+        entries.add(new ToggleEntry("Show Targeted Fluid", CompactF3PlusConfig.showTargetFluid));
+        entries.add(new ToggleEntry("Show Targeted Entity", CompactF3PlusConfig.showTargetEntity));
+        entries.add(new ToggleEntry("Show Block Properties", CompactF3PlusConfig.showTargetProperties));
+
+        entries.add(new HeaderEntry("Position"));
+        entries.add(new CycleEntry("Anchor", CompactF3PlusConfig.hudAnchor, ANCHOR_NAMES));
+        entries.add(new IntEntry("Offset X", CompactF3PlusConfig.hudOffsetX,
+                0, CompactF3PlusConfig.MAX_HUD_OFFSET, "px"));
+        entries.add(new IntEntry("Offset Y", CompactF3PlusConfig.hudOffsetY,
+                0, CompactF3PlusConfig.MAX_HUD_OFFSET, "px"));
+
         entries.add(new HeaderEntry("Other"));
         entries.add(new ToggleEntry("Replace Default F3", CompactF3PlusConfig.replaceF3));
         entries.add(new ToggleEntry("Show Gizmo (if Replace F3)", CompactF3PlusConfig.showGizmo));
@@ -66,7 +83,7 @@ public class CompactF3PlusConfigScreen extends Screen {
         entries.add(new ToggleEntry("Color Indicators (FPS/TPS)", CompactF3PlusConfig.colorIndicators));
         entries.add(new ToggleEntry("Text Shadow", CompactF3PlusConfig.textShadow));
         entries.add(new ToggleEntry("Detailed Speed", CompactF3PlusConfig.detailedSpeed));
-        entries.add(new CycleOpacityEntry("Background Opacity", CompactF3PlusConfig.backgroundOpacity));
+        entries.add(new IntEntry("Background Opacity", CompactF3PlusConfig.backgroundOpacity, 0, 100, "%"));
 
         layoutButtons();
     }
@@ -95,20 +112,31 @@ public class CompactF3PlusConfigScreen extends Screen {
                         })
                         .bounds(centerX, y, btnWidth, btnHeight)
                         .build());
-            } else if (entry instanceof CycleOpacityEntry opacity) {
+            } else if (entry instanceof CycleEntry cycle) {
+                addRenderableWidget(Button.builder(
+                        Component.literal(cycle.label + ": " + cycle.options[cycle.value.get()]),
+                        btn -> {
+                            int next = (cycle.value.get() + 1) % cycle.options.length;
+                            cycle.value.set(next);
+                            CompactF3PlusConfig.SPEC.save();
+                            btn.setMessage(Component.literal(cycle.label + ": " + cycle.options[next]));
+                        })
+                        .bounds(centerX, y, btnWidth, btnHeight)
+                        .build());
+            } else if (entry instanceof IntEntry slider) {
                 addRenderableWidget(new AbstractSliderButton(centerX, y, btnWidth, btnHeight,
-                        Component.literal(opacity.label + ": " + opacity.value.get() + "%"),
-                        opacity.value.get() / 100.0D) {
+                        Component.literal(slider.label + ": " + slider.value.get() + slider.suffix),
+                        slider.normalize(slider.value.get())) {
 
                     @Override
                     protected void updateMessage() {
-                        this.setMessage(Component.literal(opacity.label + ": " + opacity.value.get() + "%"));
+                        this.setMessage(Component.literal(
+                                slider.label + ": " + slider.value.get() + slider.suffix));
                     }
 
                     @Override
                     protected void applyValue() {
-                        int newValue = (int) Math.round(this.value * 100.0D);
-                        opacity.value.set(newValue);
+                        slider.value.set(slider.denormalize(this.value));
                         CompactF3PlusConfig.SPEC.save();
                     }
                 });
@@ -216,6 +244,19 @@ public class CompactF3PlusConfigScreen extends Screen {
     private record ToggleEntry(String label, ModConfigSpec.BooleanValue value) implements ConfigEntry {
     }
 
-    private record CycleOpacityEntry(String label, ModConfigSpec.IntValue value) implements ConfigEntry {
+    private record CycleEntry(String label, ModConfigSpec.IntValue value, String[] options)
+            implements ConfigEntry {
+    }
+
+    private record IntEntry(String label, ModConfigSpec.IntValue value, int min, int max, String suffix)
+            implements ConfigEntry {
+
+        double normalize(int value) {
+            return (double) (value - min) / (max - min);
+        }
+
+        int denormalize(double sliderValue) {
+            return min + (int) Math.round(sliderValue * (max - min));
+        }
     }
 }
