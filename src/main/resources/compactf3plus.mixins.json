@@ -4,8 +4,8 @@
   "package": "net.nikenmar.compactf3plus.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "DebugScreenOverlayMixin",
-    "GuiMixin"
+    "GuiMixin",
+    "SoundSystemMixin"
   ],
   "injectors": {
     "defaultRequire": 1

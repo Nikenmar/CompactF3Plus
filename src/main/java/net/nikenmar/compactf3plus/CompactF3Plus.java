@@ -4,6 +4,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
@@ -11,9 +12,18 @@ import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.RenderTickCounter;
+import net.minecraft.client.sound.SoundInstance;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.fluid.FluidState;
+import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.integrated.IntegratedServer;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.state.property.IntProperty;
+import net.minecraft.state.property.Property;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.LightType;
@@ -23,11 +33,17 @@ import org.lwjgl.glfw.GLFW;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public final class CompactF3Plus implements ClientModInitializer {
     private static final class HudRenderer {
         private static boolean compactHudEnabled = false;
+        // True when the active HUD session was opened by pressing F3. F8 and
+        // enabledByDefault leave it false, so they never bring up the gizmo.
+        private static boolean compactHudOpenedViaF3 = false;
         private static boolean wasDebugShowing = false;
+        private static SoundInstance currentMusicInstance = null;
+        private static String currentMusicTrackName = "";
         private static final int AVG_FPS_SECONDS = 60;
         private static final LinkedList<Integer> fpsHistory = new LinkedList<>();
         private static long lastFpsSampleTime = 0;
@@ -104,35 +120,84 @@ public final class CompactF3Plus implements ClientModInitializer {
 
             ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
                 compactHudEnabled = CompactF3PlusConfig.enabledByDefault;
+                compactHudOpenedViaF3 = false;
                 wasDebugShowing = false;
             });
 
             HudRenderCallback.EVENT.register(HudRenderer::onRenderHud);
         }
 
-        private static boolean shouldCancelVanillaDebugOverlay() {
+        // Runs at the head of InGameHud#render, before anything draws. Detects the
+        // F3 toggle and CLEARS the vanilla debug flag instead of cancelling the debug
+        // HUD render, so other mods stop being told that F3 is open. Vanilla checks
+        // the same flag before drawing its debug HUD, so it hides either way.
+        private static void onPreRenderHud() {
             if (!CompactF3PlusConfig.replaceF3) {
-                return false;
+                return;
             }
 
             MinecraftClient mc = MinecraftClient.getInstance();
-            if (mc.player == null || mc.options.hudHidden) {
-                return false;
-            }
-
-            // Cancel vanilla debug immediately when F3 state is on.
-            // This avoids one-frame flashes before our own state sync runs in HudRenderCallback.
-            return mc.getDebugHud().shouldShowDebugHud();
-        }
-
-        private static boolean shouldHideDebugCrosshair() {
-            return shouldCancelVanillaDebugOverlay() && !CompactF3PlusConfig.showGizmo;
-        }
-
-        private static void onRenderHud(DrawContext guiGraphics, RenderTickCounter ignored) {
-            MinecraftClient mc = MinecraftClient.getInstance();
-            if (TOGGLE_HUD.wasPressed()) {
+            boolean debugShowing = mc.getDebugHud().shouldShowDebugHud();
+            if (debugShowing != wasDebugShowing) {
                 compactHudEnabled = !compactHudEnabled;
+                // True if F3 just opened the HUD; false if F3 just closed it.
+                compactHudOpenedViaF3 = compactHudEnabled;
+            }
+            if (debugShowing) {
+                mc.getDebugHud().toggleDebugHud();
+            }
+            wasDebugShowing = false;
+        }
+
+        private static boolean wantGizmo() {
+            return CompactF3PlusConfig.replaceF3
+                    && CompactF3PlusConfig.showGizmo
+                    && compactHudEnabled
+                    && compactHudOpenedViaF3;
+        }
+
+        private static String formatTrackName(String rawPath) {
+            if (rawPath == null) {
+                return "Unknown";
+            }
+            String[] parts = rawPath.split("[/.]");
+            String fileName = parts[parts.length - 1];
+
+            StringBuilder sb = new StringBuilder();
+            for (String word : fileName.split("_")) {
+                if (!word.isEmpty()) {
+                    if (sb.length() > 0) {
+                        sb.append(' ');
+                    }
+                    sb.append(Character.toUpperCase(word.charAt(0)));
+                    if (word.length() > 1) {
+                        sb.append(word.substring(1));
+                    }
+                }
+            }
+            return sb.toString();
+        }
+
+        private static void onSoundPlay(SoundInstance sound) {
+            if (sound != null
+                    && (sound.getCategory() == SoundCategory.MUSIC || sound.getCategory() == SoundCategory.RECORDS)) {
+                currentMusicInstance = sound;
+                currentMusicTrackName = "Unknown";
+            }
+        }
+
+        // Renders a generic "name=value" for any property without knowing its type.
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private static String propertyValueName(Property<?> property, Comparable<?> value) {
+            return ((Property) property).name((Comparable) value);
+        }
+
+        private static void onRenderHud(DrawContext guiGraphics, RenderTickCounter deltaTracker) {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            while (TOGGLE_HUD.wasPressed()) {
+                compactHudEnabled = !compactHudEnabled;
+                // F8 opens the HUD in "plain" mode — never with the gizmo.
+                compactHudOpenedViaF3 = false;
             }
 
             ClientPlayerEntity player = mc.player;
@@ -142,16 +207,7 @@ public final class CompactF3Plus implements ClientModInitializer {
 
             boolean debugShowing = mc.getDebugHud().shouldShowDebugHud();
             if (CompactF3PlusConfig.replaceF3) {
-                if (debugShowing != wasDebugShowing) {
-                    compactHudEnabled = !compactHudEnabled;
-                    wasDebugShowing = debugShowing;
-                }
-
-                if (!compactHudEnabled && debugShowing) {
-                    mc.getDebugHud().toggleDebugHud();
-                    wasDebugShowing = false;
-                }
-
+                // The state machine already ran at the head of InGameHud#render.
                 if (!compactHudEnabled) {
                     return;
                 }
@@ -475,12 +531,108 @@ public final class CompactF3Plus implements ClientModInitializer {
                 nextLine().addSegment("Dimension: " + dimension);
             }
 
+            // Music Track
+            if (CompactF3PlusConfig.showMusicTrack && currentMusicInstance != null) {
+                if (mc.getSoundManager().isPlaying(currentMusicInstance)) {
+                    try {
+                        if (currentMusicInstance.getSound() != null
+                                && currentMusicInstance.getSound().getIdentifier() != null) {
+                            String refined = formatTrackName(
+                                    currentMusicInstance.getSound().getIdentifier().getPath());
+                            if (!refined.equals("Unknown")) {
+                                currentMusicTrackName = refined;
+                            }
+                        } else if (currentMusicTrackName.equals("Unknown")) {
+                            currentMusicTrackName = formatTrackName(currentMusicInstance.getId().getPath());
+                        }
+                    } catch (Exception ignored) {
+                        // Sound metadata is not always resolvable; keep the last known name.
+                    }
+                    nextLine().addSegment("Music: " + currentMusicTrackName);
+                } else {
+                    currentMusicInstance = null;
+                    currentMusicTrackName = "";
+                }
+            }
+
+            // Durability
+            if (CompactF3PlusConfig.showDurability) {
+                String durLine = "";
+                ItemStack mainHand = player.getMainHandStack();
+                if (mainHand.isDamageable() && mainHand.isDamaged()) {
+                    durLine += (mainHand.getMaxDamage() - mainHand.getDamage()) + "/" + mainHand.getMaxDamage();
+                }
+                ItemStack offHand = player.getOffHandStack();
+                if (offHand.isDamageable() && offHand.isDamaged()) {
+                    if (!durLine.isEmpty()) {
+                        durLine += " | ";
+                    }
+                    durLine += (offHand.getMaxDamage() - offHand.getDamage()) + "/" + offHand.getMaxDamage();
+                }
+                if (!durLine.isEmpty()) {
+                    nextLine().addSegment("Durability: " + durLine);
+                }
+            }
+
+            // Crop growth and the targeted-block line share one crosshair pick.
+            BlockState targetState = null;
+            if ((CompactF3PlusConfig.showCropGrowth || CompactF3PlusConfig.showTargetBlock)
+                    && mc.crosshairTarget instanceof BlockHitResult hit
+                    && hit.getType() == HitResult.Type.BLOCK) {
+                targetState = player.getWorld().getBlockState(hit.getBlockPos());
+            }
+
+            // Crop Growth
+            if (CompactF3PlusConfig.showCropGrowth && targetState != null) {
+                Property<?> ageProp = targetState.getProperties().stream()
+                        .filter(p -> p.getName().equals("age")).findFirst().orElse(null);
+                if (ageProp instanceof IntProperty intProp) {
+                    int age = targetState.get(intProp);
+                    int maxAge = intProp.getValues().stream().max(Integer::compareTo).orElse(age);
+                    int percent = (int) (((float) age / maxAge) * 100);
+                    nextLine().addSegment("Crop Age: " + age + "/" + maxAge + " (" + percent + "%)");
+                }
+            }
+
+            // Targeted block — registry id, so modded blocks resolve too.
+            if (CompactF3PlusConfig.showTargetBlock && targetState != null) {
+                HudLine line = nextLine();
+                line.addSegment("Block: " + Registries.BLOCK.getId(targetState.getBlock()));
+                if (CompactF3PlusConfig.showTargetProperties) {
+                    String props = targetState.getEntries().entrySet().stream()
+                            .map(e -> e.getKey().getName() + "=" + propertyValueName(e.getKey(), e.getValue()))
+                            .collect(Collectors.joining(", "));
+                    if (!props.isEmpty()) {
+                        line.addSegment(" [" + props + "]", 0xAAAAAA);
+                    }
+                }
+            }
+
+            // Targeted fluid needs its OWN raycast: mc.crosshairTarget ignores fluids
+            // and looks straight through water, so reusing it would leave this line
+            // permanently empty.
+            if (CompactF3PlusConfig.showTargetFluid) {
+                HitResult fluidHit = player.raycast(player.getBlockInteractionRange(),
+                        deltaTracker.getTickDelta(false), true);
+                if (fluidHit instanceof BlockHitResult fluidBlockHit
+                        && fluidHit.getType() == HitResult.Type.BLOCK) {
+                    FluidState fluid = player.getWorld().getFluidState(fluidBlockHit.getBlockPos());
+                    if (!fluid.isEmpty()) {
+                        nextLine().addSegment("Fluid: " + Registries.FLUID.getId(fluid.getFluid()));
+                    }
+                }
+            }
+
+            // Targeted entity
+            if (CompactF3PlusConfig.showTargetEntity && mc.targetedEntity != null) {
+                nextLine().addSegment("Entity: "
+                        + Registries.ENTITY_TYPE.getId(mc.targetedEntity.getType()));
+            }
+
             if (currentLineIndex == 0) {
                 return;
             }
 
-            int drawX = 10;
-            int drawY = 10;
             int lineHeight = 10;
 
             int maxWidth = 0;
@@ -494,16 +646,32 @@ public final class CompactF3Plus implements ClientModInitializer {
             }
             int padding = 4;
 
+            // Anchor the measured box to the configured corner. Offsets are the gap
+            // between the box edge and that corner, so the panel never drifts off
+            // screen when it grows.
+            int boxWidth = maxWidth + padding * 2;
+            int boxHeight = currentLineIndex * lineHeight + padding * 2;
+            int screenWidth = mc.getWindow().getScaledWidth();
+            int screenHeight = mc.getWindow().getScaledHeight();
+            int anchor = CompactF3PlusConfig.hudAnchor;
+            boolean anchorRight = anchor == 1 || anchor == 3;
+            boolean anchorBottom = anchor == 2 || anchor == 3;
+
+            int boxX = anchorRight
+                    ? screenWidth - boxWidth - CompactF3PlusConfig.hudOffsetX
+                    : CompactF3PlusConfig.hudOffsetX;
+            int boxY = anchorBottom
+                    ? screenHeight - boxHeight - CompactF3PlusConfig.hudOffsetY
+                    : CompactF3PlusConfig.hudOffsetY;
+
+            int drawX = boxX + padding;
+            int drawY = boxY + padding;
+
             int opacitySetting = CompactF3PlusConfig.backgroundOpacity;
             int alphaInt = (int) ((opacitySetting / 100.0f) * 255.0f);
             int bgColor = (alphaInt << 24) | 0x000000;
 
-            guiGraphics.fill(
-                    drawX - padding,
-                    drawY - padding,
-                    drawX + maxWidth + padding,
-                    drawY + currentLineIndex * lineHeight + padding,
-                    bgColor);
+            guiGraphics.fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, bgColor);
 
             boolean drawShadow = CompactF3PlusConfig.textShadow;
             for (int i = 0; i < currentLineIndex; i++) {
@@ -525,11 +693,15 @@ public final class CompactF3Plus implements ClientModInitializer {
         HudRenderer.initialize();
     }
 
-    public static boolean shouldCancelVanillaDebugOverlay() {
-        return HudRenderer.shouldCancelVanillaDebugOverlay();
+    public static void onPreRenderHud() {
+        HudRenderer.onPreRenderHud();
     }
 
-    public static boolean shouldHideDebugCrosshair() {
-        return HudRenderer.shouldHideDebugCrosshair();
+    public static boolean wantGizmo() {
+        return HudRenderer.wantGizmo();
+    }
+
+    public static void onSoundPlay(SoundInstance sound) {
+        HudRenderer.onSoundPlay(sound);
     }
 }

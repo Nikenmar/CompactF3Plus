@@ -82,6 +82,42 @@ public final class CompactF3PlusConfigScreen {
                 .setSaveConsumer(value -> CompactF3PlusConfig.showDimension = value)
                 .build());
 
+        sections.addEntry(entryBuilder.startBooleanToggle(Text.literal("Show Durability"), CompactF3PlusConfig.showDurability)
+                .setSaveConsumer(value -> CompactF3PlusConfig.showDurability = value)
+                .build());
+        sections.addEntry(entryBuilder.startBooleanToggle(Text.literal("Show Crop Growth"), CompactF3PlusConfig.showCropGrowth)
+                .setSaveConsumer(value -> CompactF3PlusConfig.showCropGrowth = value)
+                .build());
+        sections.addEntry(entryBuilder.startBooleanToggle(Text.literal("Show Music Track"), CompactF3PlusConfig.showMusicTrack)
+                .setSaveConsumer(value -> CompactF3PlusConfig.showMusicTrack = value)
+                .build());
+        sections.addEntry(entryBuilder.startBooleanToggle(Text.literal("Show Targeted Block"), CompactF3PlusConfig.showTargetBlock)
+                .setSaveConsumer(value -> CompactF3PlusConfig.showTargetBlock = value)
+                .build());
+        sections.addEntry(entryBuilder.startBooleanToggle(Text.literal("Show Targeted Fluid"), CompactF3PlusConfig.showTargetFluid)
+                .setSaveConsumer(value -> CompactF3PlusConfig.showTargetFluid = value)
+                .build());
+        sections.addEntry(entryBuilder.startBooleanToggle(Text.literal("Show Targeted Entity"), CompactF3PlusConfig.showTargetEntity)
+                .setSaveConsumer(value -> CompactF3PlusConfig.showTargetEntity = value)
+                .build());
+        sections.addEntry(entryBuilder.startBooleanToggle(Text.literal("Show Block Properties"), CompactF3PlusConfig.showTargetProperties)
+                .setSaveConsumer(value -> CompactF3PlusConfig.showTargetProperties = value)
+                .build());
+
+        ConfigCategory position = builder.getOrCreateCategory(Text.literal("Position"));
+        position.addEntry(entryBuilder.startIntSlider(Text.literal("Anchor (0=TL, 1=TR, 2=BL, 3=BR)"),
+                        CompactF3PlusConfig.hudAnchor, 0, CompactF3PlusConfig.ANCHOR_COUNT - 1)
+                .setSaveConsumer(value -> CompactF3PlusConfig.hudAnchor = value)
+                .build());
+        position.addEntry(entryBuilder.startIntSlider(Text.literal("Offset X"),
+                        CompactF3PlusConfig.hudOffsetX, 0, CompactF3PlusConfig.MAX_HUD_OFFSET)
+                .setSaveConsumer(value -> CompactF3PlusConfig.hudOffsetX = value)
+                .build());
+        position.addEntry(entryBuilder.startIntSlider(Text.literal("Offset Y"),
+                        CompactF3PlusConfig.hudOffsetY, 0, CompactF3PlusConfig.MAX_HUD_OFFSET)
+                .setSaveConsumer(value -> CompactF3PlusConfig.hudOffsetY = value)
+                .build());
+
         ConfigCategory visuals = builder.getOrCreateCategory(Text.literal("Visuals"));
         visuals.addEntry(entryBuilder.startBooleanToggle(Text.literal("Replace Default F3"), CompactF3PlusConfig.replaceF3)
                 .setSaveConsumer(value -> CompactF3PlusConfig.replaceF3 = value)

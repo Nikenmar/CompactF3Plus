@@ -34,6 +34,13 @@ public final class CompactF3PlusConfig {
     public static boolean showLight = true;
     public static boolean showBiome = true;
     public static boolean showDimension = false;
+    public static boolean showDurability = false;
+    public static boolean showCropGrowth = false;
+    public static boolean showMusicTrack = false;
+    public static boolean showTargetBlock = false;
+    public static boolean showTargetFluid = false;
+    public static boolean showTargetEntity = false;
+    public static boolean showTargetProperties = false;
 
     public static boolean colorIndicators = false;
     public static boolean textShadow = false;
@@ -41,6 +48,13 @@ public final class CompactF3PlusConfig {
     public static boolean showGizmo = false;
     public static boolean enabledByDefault = false;
     public static int backgroundOpacity = 25;
+
+    // 0 = top-left, 1 = top-right, 2 = bottom-left, 3 = bottom-right.
+    public static final int ANCHOR_COUNT = 4;
+    public static final int MAX_HUD_OFFSET = 200;
+    public static int hudAnchor = 0;
+    public static int hudOffsetX = 6;
+    public static int hudOffsetY = 6;
 
     private CompactF3PlusConfig() {
     }
@@ -77,6 +91,13 @@ public final class CompactF3PlusConfig {
             showLight = getBoolean(root, "showLight", showLight);
             showBiome = getBoolean(root, "showBiome", showBiome);
             showDimension = getBoolean(root, "showDimension", showDimension);
+            showDurability = getBoolean(root, "showDurability", showDurability);
+            showCropGrowth = getBoolean(root, "showCropGrowth", showCropGrowth);
+            showMusicTrack = getBoolean(root, "showMusicTrack", showMusicTrack);
+            showTargetBlock = getBoolean(root, "showTargetBlock", showTargetBlock);
+            showTargetFluid = getBoolean(root, "showTargetFluid", showTargetFluid);
+            showTargetEntity = getBoolean(root, "showTargetEntity", showTargetEntity);
+            showTargetProperties = getBoolean(root, "showTargetProperties", showTargetProperties);
 
             colorIndicators = getBoolean(root, "colorIndicators", colorIndicators);
             textShadow = getBoolean(root, "textShadow", textShadow);
@@ -84,6 +105,9 @@ public final class CompactF3PlusConfig {
             showGizmo = getBoolean(root, "showGizmo", showGizmo);
             enabledByDefault = getBoolean(root, "enabledByDefault", enabledByDefault);
             backgroundOpacity = clamp(getInt(root, "backgroundOpacity", backgroundOpacity), 0, 100);
+            hudAnchor = clamp(getInt(root, "hudAnchor", hudAnchor), 0, ANCHOR_COUNT - 1);
+            hudOffsetX = clamp(getInt(root, "hudOffsetX", hudOffsetX), 0, MAX_HUD_OFFSET);
+            hudOffsetY = clamp(getInt(root, "hudOffsetY", hudOffsetY), 0, MAX_HUD_OFFSET);
         } catch (IOException ignored) {
             // Use in-memory defaults if file cannot be read.
         }
@@ -110,6 +134,13 @@ public final class CompactF3PlusConfig {
         root.addProperty("showLight", showLight);
         root.addProperty("showBiome", showBiome);
         root.addProperty("showDimension", showDimension);
+        root.addProperty("showDurability", showDurability);
+        root.addProperty("showCropGrowth", showCropGrowth);
+        root.addProperty("showMusicTrack", showMusicTrack);
+        root.addProperty("showTargetBlock", showTargetBlock);
+        root.addProperty("showTargetFluid", showTargetFluid);
+        root.addProperty("showTargetEntity", showTargetEntity);
+        root.addProperty("showTargetProperties", showTargetProperties);
 
         root.addProperty("colorIndicators", colorIndicators);
         root.addProperty("textShadow", textShadow);
@@ -117,6 +148,9 @@ public final class CompactF3PlusConfig {
         root.addProperty("showGizmo", showGizmo);
         root.addProperty("enabledByDefault", enabledByDefault);
         root.addProperty("backgroundOpacity", backgroundOpacity);
+        root.addProperty("hudAnchor", hudAnchor);
+        root.addProperty("hudOffsetX", hudOffsetX);
+        root.addProperty("hudOffsetY", hudOffsetY);
 
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
@@ -148,6 +182,13 @@ public final class CompactF3PlusConfig {
         showLight = true;
         showBiome = true;
         showDimension = false;
+        showDurability = false;
+        showCropGrowth = false;
+        showMusicTrack = false;
+        showTargetBlock = false;
+        showTargetFluid = false;
+        showTargetEntity = false;
+        showTargetProperties = false;
 
         colorIndicators = false;
         textShadow = false;
@@ -155,6 +196,9 @@ public final class CompactF3PlusConfig {
         showGizmo = false;
         enabledByDefault = false;
         backgroundOpacity = 25;
+        hudAnchor = 0;
+        hudOffsetX = 6;
+        hudOffsetY = 6;
         save();
     }
 
