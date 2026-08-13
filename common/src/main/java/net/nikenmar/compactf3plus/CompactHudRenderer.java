@@ -196,7 +196,8 @@ public final class CompactHudRenderer {
                 compactHudOpenedViaF3 = false;
             }
             LocalPlayer player = mc.player;
-            if (player == null || mc.options.hideGui)
+            // 26.2 moved the "GUI hidden" flag off Options onto the Hud itself.
+            if (player == null || mc.gui.hud.isHidden())
                 return;
 
             // replaceF3=on path: state machine is driven by onPreHudExtract. Just bail
@@ -407,7 +408,8 @@ public final class CompactHudRenderer {
 
             // Entities
             if (CompactF3PlusConfig.showEntities) {
-                String debugEntities = mc.levelRenderer.getEntityStatistics();
+                // 26.2 moved this off LevelRenderer onto LevelExtractor; same format.
+                String debugEntities = mc.levelExtractor.entityStatistics();
                 String eCount = debugEntities;
                 int commaIdx = debugEntities.indexOf(',');
                 if (commaIdx != -1) {

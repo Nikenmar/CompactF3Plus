@@ -250,7 +250,8 @@ public class CompactF3PlusConfigScreen extends Screen {
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        // 26.2 renamed Minecraft#setScreen.
+        minecraft.setScreenAndShow(parent);
     }
 
     private interface ConfigEntry {
